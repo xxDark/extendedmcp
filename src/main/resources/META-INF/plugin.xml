@@ -1,0 +1,27 @@
+<idea-plugin>
+    <id>dev.xdark.ij-mcp</id>
+    <name>Extended MCP</name>
+    <vendor>xdark</vendor>
+    <description>Extends the built-in JetBrains MCP server with additional tools: find_usages, apply_quick_fix, optimize_imports.</description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.mcpServer</depends>
+    <depends>com.intellij.modules.java</depends>
+    <depends>com.intellij.gradle</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.FindUsagesToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.QuickFixToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.ExtendedRefactoringToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.ImplementationsToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.TypeInfoToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.ExtractMethodToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.LibrarySourcesToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.GoToDeclarationToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.FileStructureToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.FindClassToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.GradleToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.MoveClassToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.ChangeSignatureToolset"/>
+    </extensions>
+</idea-plugin>
