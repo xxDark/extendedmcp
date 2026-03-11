@@ -10,7 +10,10 @@ import com.intellij.openapi.application.readAction
 import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
-import dev.xdark.ijmcp.util.*
+import dev.xdark.ijmcp.util.formatLocation
+import dev.xdark.ijmcp.util.getContextText
+import dev.xdark.ijmcp.util.resolveFile
+import dev.xdark.ijmcp.util.resolveTargetElement
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.serialization.Serializable
 

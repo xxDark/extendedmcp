@@ -18,11 +18,7 @@ import com.intellij.openapi.application.EDT
 import com.intellij.openapi.externalSystem.model.execution.ExternalSystemTaskExecutionSettings
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil
 import com.intellij.openapi.util.Key
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.*
 import kotlinx.serialization.Serializable
 import org.jetbrains.plugins.gradle.util.GradleConstants
 
