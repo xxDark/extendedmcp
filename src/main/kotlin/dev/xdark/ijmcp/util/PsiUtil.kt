@@ -75,10 +75,14 @@ fun formatLocation(project: Project, element: PsiElement): String {
     val navElement = element.navigationElement
     val file = navElement.containingFile?.virtualFile ?: return "<unknown>"
     val document = FileDocumentManager.getInstance().getDocument(file)
-    val relativePath = project.projectDirectory.relativizeIfPossible(file)
-    // For library classes, relativizeIfPossible returns a long cache path — use qualified name instead
-    if (relativePath.contains(".jar!") || relativePath.startsWith("..")) {
-        // Try to get FQN from PSI, then fall back to extracting from .class file path in JAR
+    val relativePath = try {
+        project.projectDirectory.relativizeIfPossible(file)
+    } catch (_: IllegalArgumentException) {
+        // Windows: paths on different drives can't be relativized
+        null
+    }
+    // For library/JDK classes: relativize failed, or returned a long cache path
+    if (relativePath == null || relativePath.contains(".jar!") || relativePath.startsWith("..")) {
         val target = element as? PsiQualifiedNamedElement
             ?: PsiTreeUtil.getParentOfType(element, PsiQualifiedNamedElement::class.java)
         val fqn = target?.qualifiedName
@@ -86,13 +90,7 @@ fun formatLocation(project: Project, element: PsiElement): String {
                 .removeSuffix(".class")
                 .replace('/', '.')
                 .ifEmpty { (element as? PsiNamedElement)?.name ?: file.nameWithoutExtension }
-        return if (document != null) {
-            val offset = navElement.textOffset
-            val line = document.getLineNumber(offset) + 1
-            "$fqn (library)"
-        } else {
-            "$fqn (library)"
-        }
+        return "$fqn (library)"
     }
     if (document == null) return relativePath
     val offset = navElement.textOffset

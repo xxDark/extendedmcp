@@ -23,5 +23,7 @@
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.GradleToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.MoveClassToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.ChangeSignatureToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.SafeDeleteToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.InlineToolset"/>
     </extensions>
 </idea-plugin>
