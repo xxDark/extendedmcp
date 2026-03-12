@@ -25,5 +25,6 @@
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.ChangeSignatureToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.SafeDeleteToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.InlineToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.ListPackageClassesToolset"/>
     </extensions>
 </idea-plugin>

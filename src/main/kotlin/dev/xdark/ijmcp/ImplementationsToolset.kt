@@ -5,8 +5,10 @@ package dev.xdark.ijmcp
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
+import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.readAction
+import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.DefinitionsScopedSearch
@@ -43,19 +45,32 @@ class ImplementationsToolset : McpToolset {
         |For an interface/abstract class: returns all implementing/extending classes.
         |For a method: returns all overriding methods.
         |
-        |Provide either symbolName OR line+column to identify the target symbol.
+        |Three ways to identify the target:
+        |  1. className — fully qualified name (e.g. "java.util.List"). Works for library/JDK classes.
+        |  2. filePath + symbolName — find symbol by name in a project file.
+        |  3. filePath + line + column — find symbol at a specific position.
     """)
     suspend fun get_implementations(
-        @McpDescription("Path relative to the project root") filePath: String,
+        @McpDescription("Path relative to the project root (not needed when using className)") filePath: String = "",
         @McpDescription("Name of the symbol. Alternative to line+column.") symbolName: String = "",
         @McpDescription("1-based line number. Used with column as alternative to symbolName.") line: Int = 0,
         @McpDescription("1-based column number. Used with line.") column: Int = 0,
+        @McpDescription("Fully qualified class name (e.g. 'java.util.List'). Works for library/JDK classes.") className: String = "",
         @McpDescription("Search scope: 'project' (default) or 'all' (includes libraries)") scope: String = "project",
     ): GetImplementationsResult {
         val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, filePath)
 
-        val targetElement = resolveTargetElement(resolved, symbolName, line, column)
+        val targetElement = if (className.isNotEmpty()) {
+            // Resolve by FQN — works for library/JDK classes
+            readAction {
+                val searchScope = GlobalSearchScope.allScope(project)
+                JavaPsiFacade.getInstance(project).findClass(className, searchScope)
+                    ?: mcpFail("Class '$className' not found")
+            }
+        } else {
+            val resolved = resolveFile(project, filePath)
+            resolveTargetElement(resolved, symbolName, line, column)
+        }
 
         val declarationLocation = readAction { formatLocation(project, targetElement) }
         val resolvedName = readAction { (targetElement as? PsiNamedElement)?.name ?: targetElement.text }
@@ -69,10 +84,12 @@ class ImplementationsToolset : McpToolset {
             DefinitionsScopedSearch.search(targetElement, searchScope).findAll()
         }
 
+        val seen = mutableSetOf<String>()
         val implementations = readAction {
             definitions.mapNotNull { element ->
                 val name = (element as? PsiNamedElement)?.name ?: return@mapNotNull null
                 val loc = formatLocation(project, element)
+                if (!seen.add(loc)) return@mapNotNull null // deduplicate
                 if (loc.endsWith("(library)")) {
                     ImplementationInfo(
                         name = name,
