@@ -34,6 +34,8 @@
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.AddMemberToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.AddImportToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.DocumentationToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.ToolFilterToolset"/>
+        <mcpServer.mcpToolsProvider implementation="dev.xdark.ijmcp.FilteredToolsProvider"/>
     </extensions>
 
     <applicationListeners>
@@ -46,6 +48,12 @@
                 class="dev.xdark.ijmcp.McpMetricsAction"
                 text="MCP Tool Metrics"
                 description="View MCP tool usage statistics">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action id="dev.xdark.ijmcp.ToolFilterAction"
+                class="dev.xdark.ijmcp.ToolFilterAction"
+                text="MCP Tool Filter"
+                description="Enable or disable MCP tools">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
     </actions>
