@@ -112,4 +112,4 @@ User toggles tools via **Tools > MCP Tool Filter** (checkbox dialog). The `list_
 - **Kotlin plugin dependency**: Bundled plugin `org.jetbrains.kotlin` — requires `<supportsKotlinPluginMode supportsK2="true"/>` in plugin.xml.
 - **PsiClassOwner**: `(psiFile as? PsiClassOwner)?.classes` works for both Java and Kotlin files.
 - **Windows path relativization**: `relativizeIfPossible` throws `IllegalArgumentException` when paths are on different drives (e.g. JDK on D:\ vs project on F:\). Always wrap in try-catch.
-- **Sub-packages and kotlinx.serialization**: `@Serializable` data classes in sub-packages (e.g. `dev.xdark.ijmcp.filter`) may fail at runtime with "is not serializable". Keep `@Serializable` classes in the main `dev.xdark.ijmcp` package.
+- **Dependency scoping**: The `api("io.modelcontextprotocol:kotlin-sdk-server:...")` dependency in `build.gradle.kts` is for source browsing only. Using `api` or `implementation` causes `buildPlugin` to embed it into the plugin jar, creating classloader conflicts with the built-in MCP server plugin (e.g. "is not serializable" errors). Keep it as `compileOnly` or accept the embedding risk.
