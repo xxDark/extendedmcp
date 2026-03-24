@@ -34,32 +34,45 @@ class AddImportToolset : McpToolset {
         val message: String,
     )
 
+    @Serializable
+    data class AddImportsResult(
+        val results: List<AddImportResult>,
+    )
+
     @McpTool
     @McpDescription(
         """
-        |Adds an import statement to a Java or Kotlin file.
-        |For Java files, pass the fully qualified class name (e.g. "java.util.List").
-        |For Kotlin files, pass the fully qualified name (e.g. "kotlin.collections.mutableListOf").
+        |Adds one or more import statements to a Java or Kotlin file.
+        |Pass fully qualified names separated by semicolons (e.g. "java.util.List;java.util.Map").
+        |A single import also works (e.g. "java.util.List").
         |Use isStatic=true for Java static imports, isAllUnder=true for wildcard imports (.*).
-        |Skips the import if it already exists.
+        |Skips imports that already exist.
     """
     )
     suspend fun add_import(
         @McpDescription("Path relative to the project root") filePath: String,
-        @McpDescription("Fully qualified name to import (e.g. 'java.util.List', 'kotlin.collections.mutableListOf')") fqName: String,
+        @McpDescription("Fully qualified names to import, semicolon-separated (e.g. 'java.util.List;java.util.Map')") fqNames: String,
         @McpDescription("For Java: static import (default false)") isStatic: Boolean = false,
         @McpDescription("Wildcard import .* (default false)") isAllUnder: Boolean = false,
-    ): AddImportResult {
+    ): AddImportsResult {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, filePath)
-
         val isKotlin = readAction { resolved.psiFile is KtFile }
 
-        if (isKotlin) {
-            return addKotlinImport(resolved, fqName, isAllUnder)
-        } else {
-            return addJavaImport(resolved, fqName, isStatic)
+        val results = fqNames.split(';').filter { it.isNotBlank() }.map { fqName ->
+            val trimmed = fqName.trim()
+            if (isKotlin) {
+                addKotlinImport(resolved, trimmed, isAllUnder)
+            } else {
+                addJavaImport(resolved, trimmed, isStatic)
+            }
         }
+
+        withContext(Dispatchers.EDT) {
+            FileDocumentManager.getInstance().saveDocument(resolved.document)
+        }
+
+        return AddImportsResult(results)
     }
 
     private suspend fun addJavaImport(
@@ -138,10 +151,6 @@ class AddImportToolset : McpToolset {
             }
         }
 
-        withContext(Dispatchers.EDT) {
-            FileDocumentManager.getInstance().saveDocument(resolved.document)
-        }
-
         return AddImportResult(added = true, import = fqName, message = "Import added")
     }
 
@@ -188,10 +197,6 @@ class AddImportToolset : McpToolset {
                     }
                 }
             }
-        }
-
-        withContext(Dispatchers.EDT) {
-            FileDocumentManager.getInstance().saveDocument(resolved.document)
         }
 
         val displayName = if (isAllUnder) "$fqName.*" else fqName
