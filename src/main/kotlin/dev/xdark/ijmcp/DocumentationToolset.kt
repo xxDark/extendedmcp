@@ -10,6 +10,7 @@ import com.intellij.mcpserver.project
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
@@ -17,6 +18,7 @@ import com.intellij.psi.PsiClassOwner
 import com.intellij.psi.PsiDocCommentOwner
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiElementFactory
+import com.intellij.psi.PsiModifier
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.PsiTreeUtil
 import dev.xdark.ijmcp.util.ResolvedFile
@@ -26,10 +28,14 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import org.jetbrains.kotlin.kdoc.psi.api.KDoc
+import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
+import org.jetbrains.kotlin.psi.KtEnumEntry
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNamedDeclaration
 import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtObjectDeclaration
 import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtPsiFactory
 
@@ -53,6 +59,23 @@ class DocumentationToolset : McpToolset {
     @Serializable
     data class GetDocResult(
         val entries: List<DocEntry>,
+    )
+
+    @Serializable
+    data class UndocumentedElement(
+        val kind: String,
+        val name: String,
+        val line: Int,
+        val signature: String,
+        val className: String = "",
+    )
+
+    @Serializable
+    data class MissingDocResult(
+        val filePath: String,
+        val undocumented: List<UndocumentedElement>,
+        val total: Int,
+        val documented: Int,
     )
 
     @McpTool
@@ -135,6 +158,240 @@ class DocumentationToolset : McpToolset {
             getKotlinDoc(resolved, className, memberName, memberIndex)
         } else {
             getJavaDoc(resolved, className, memberName, memberIndex)
+        }
+    }
+
+    @McpTool
+    @McpDescription(
+        """
+        |Reports classes, methods, fields, and top-level declarations missing documentation in a file.
+        |
+        |Returns undocumented elements with kind, name, line number, and signature.
+        |By default only non-private elements are reported.
+        |Use after adding documentation to verify coverage without re-reading the entire file.
+    """
+    )
+    suspend fun missing_documentation(
+        @McpDescription("Path relative to the project root") filePath: String,
+        @McpDescription("Include private members (default false)") includePrivate: Boolean = false,
+    ): MissingDocResult {
+        val project = currentCoroutineContext().project
+        val resolved = resolveFile(project, filePath)
+
+        val isKotlin = readAction { resolved.psiFile is KtFile }
+
+        return if (isKotlin) {
+            findMissingKotlinDocs(resolved, filePath, includePrivate)
+        } else {
+            findMissingJavaDocs(resolved, filePath, includePrivate)
+        }
+    }
+
+    private fun docLineOf(element: PsiElement, document: Document): Int {
+        val offset = element.navigationElement.textOffset
+        if (offset < 0 || offset >= document.textLength) return 0
+        return document.getLineNumber(offset) + 1
+    }
+
+    private suspend fun findMissingJavaDocs(
+        resolved: ResolvedFile,
+        filePath: String,
+        includePrivate: Boolean,
+    ): MissingDocResult {
+        return readAction {
+            val document = resolved.document
+            val classOwner = resolved.psiFile as? PsiClassOwner
+                ?: mcpFail("File is not a Java class file")
+            val classes = classOwner.classes
+            if (classes.isEmpty()) mcpFail("No classes found in file")
+
+            val undocumented = mutableListOf<UndocumentedElement>()
+            var total = 0
+            var documented = 0
+
+            fun processClass(cls: PsiClass, parentName: String) {
+                if (!includePrivate && cls.hasModifierProperty(PsiModifier.PRIVATE)) return
+                if (cls.name?.startsWith("$") == true) return
+
+                total++
+                if (cls.docComment != null) {
+                    documented++
+                } else {
+                    val kind = when {
+                        cls.isInterface -> "interface"
+                        cls.isEnum -> "enum"
+                        cls.isAnnotationType -> "annotation"
+                        else -> "class"
+                    }
+                    undocumented.add(UndocumentedElement(
+                        kind = kind,
+                        name = cls.name ?: "<anonymous>",
+                        line = docLineOf(cls, document),
+                        signature = cls.qualifiedName ?: cls.name ?: "",
+                        className = parentName,
+                    ))
+                }
+
+                for (field in cls.fields) {
+                    if (!includePrivate && field.hasModifierProperty(PsiModifier.PRIVATE)) continue
+                    if (field.name.startsWith("$") || field.name == "INSTANCE") continue
+
+                    total++
+                    if (field.docComment != null) {
+                        documented++
+                    } else {
+                        val typeName = try { field.type.presentableText } catch (_: Exception) { "?" }
+                        undocumented.add(UndocumentedElement(
+                            kind = "field",
+                            name = field.name,
+                            line = docLineOf(field, document),
+                            signature = "$typeName ${field.name}",
+                            className = cls.name ?: "",
+                        ))
+                    }
+                }
+
+                for (method in cls.methods) {
+                    if (!includePrivate && method.hasModifierProperty(PsiModifier.PRIVATE)) continue
+                    if (method.name.startsWith("$")) continue
+
+                    total++
+                    if (method.docComment != null) {
+                        documented++
+                    } else {
+                        val params = method.parameterList.parameters.joinToString(", ") { p ->
+                            val typeName = try { p.type.presentableText } catch (_: Exception) { "?" }
+                            "$typeName ${p.name}"
+                        }
+                        val returnType = try { method.returnType?.presentableText ?: "void" } catch (_: Exception) { "?" }
+                        undocumented.add(UndocumentedElement(
+                            kind = if (method.isConstructor) "constructor" else "method",
+                            name = method.name,
+                            line = docLineOf(method, document),
+                            signature = "$returnType ${method.name}($params)",
+                            className = cls.name ?: "",
+                        ))
+                    }
+                }
+
+                for (inner in cls.innerClasses) {
+                    processClass(inner, cls.name ?: "")
+                }
+            }
+
+            for (cls in classes) {
+                processClass(cls, "")
+            }
+
+            MissingDocResult(
+                filePath = filePath,
+                undocumented = undocumented,
+                total = total,
+                documented = documented,
+            )
+        }
+    }
+
+    private suspend fun findMissingKotlinDocs(
+        resolved: ResolvedFile,
+        filePath: String,
+        includePrivate: Boolean,
+    ): MissingDocResult {
+        return readAction {
+            val document = resolved.document
+            val ktFile = resolved.psiFile as? KtFile
+                ?: mcpFail("File is not a Kotlin file")
+
+            val undocumented = mutableListOf<UndocumentedElement>()
+            var total = 0
+            var documented = 0
+
+            fun hasDoc(element: PsiElement): Boolean =
+                PsiTreeUtil.getChildOfType(element, KDoc::class.java) != null
+
+            fun isPrivate(decl: KtNamedDeclaration): Boolean =
+                decl.hasModifier(KtTokens.PRIVATE_KEYWORD)
+
+            fun processDeclarations(declarations: List<org.jetbrains.kotlin.psi.KtDeclaration>, parentClassName: String) {
+                for (decl in declarations) {
+                    when (decl) {
+                        is KtEnumEntry -> continue
+                        is KtClassOrObject -> {
+                            if ((decl as? KtObjectDeclaration)?.isCompanion() == true) continue
+                            if (!includePrivate && isPrivate(decl)) continue
+
+                            total++
+                            if (hasDoc(decl)) {
+                                documented++
+                            } else {
+                                val kind = when {
+                                    decl is KtObjectDeclaration -> "object"
+                                    (decl as? KtClass)?.isInterface() == true -> "interface"
+                                    (decl as? KtClass)?.isEnum() == true -> "enum"
+                                    else -> "class"
+                                }
+                                undocumented.add(UndocumentedElement(
+                                    kind = kind,
+                                    name = decl.name ?: "<anonymous>",
+                                    line = docLineOf(decl, document),
+                                    signature = "$kind ${decl.name}",
+                                    className = parentClassName,
+                                ))
+                            }
+
+                            val body = decl.body ?: continue
+                            processDeclarations(body.declarations, decl.name ?: "")
+                        }
+                        is KtNamedFunction -> {
+                            if (!includePrivate && isPrivate(decl)) continue
+
+                            total++
+                            if (hasDoc(decl)) {
+                                documented++
+                            } else {
+                                val params = decl.valueParameters.joinToString(", ") { p ->
+                                    "${p.name ?: "_"}: ${p.typeReference?.text ?: "Any"}"
+                                }
+                                val ret = decl.typeReference?.text?.let { ": $it" } ?: ""
+                                undocumented.add(UndocumentedElement(
+                                    kind = "function",
+                                    name = decl.name ?: "<anonymous>",
+                                    line = docLineOf(decl, document),
+                                    signature = "fun ${decl.name}($params)$ret",
+                                    className = parentClassName,
+                                ))
+                            }
+                        }
+                        is KtProperty -> {
+                            if (!includePrivate && isPrivate(decl)) continue
+
+                            total++
+                            if (hasDoc(decl)) {
+                                documented++
+                            } else {
+                                val keyword = if (decl.isVar) "var" else "val"
+                                val type = decl.typeReference?.text?.let { ": $it" } ?: ""
+                                undocumented.add(UndocumentedElement(
+                                    kind = "property",
+                                    name = decl.name ?: "<anonymous>",
+                                    line = docLineOf(decl, document),
+                                    signature = "$keyword ${decl.name}$type",
+                                    className = parentClassName,
+                                ))
+                            }
+                        }
+                    }
+                }
+            }
+
+            processDeclarations(ktFile.declarations, "")
+
+            MissingDocResult(
+                filePath = filePath,
+                undocumented = undocumented,
+                total = total,
+                documented = documented,
+            )
         }
     }
 

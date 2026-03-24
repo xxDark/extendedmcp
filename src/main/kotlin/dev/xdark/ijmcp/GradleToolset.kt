@@ -24,6 +24,32 @@ import org.jetbrains.plugins.gradle.util.GradleConstants
 
 class GradleToolset : McpToolset {
 
+    companion object {
+        private val NOISY_LINE = Regex(
+            """^(""" +
+                """Downloading |Download |\s*>\s*(Downloading|Download)\b|\.+$""" +  // download
+                """|[<>]\s+\S+\.\S+.*[KMB]?/s\s*$""" +  // progress
+                """|Starting Gradle Daemon""" +
+                """|Gradle Daemon started in """ +
+                """|Consider enabling configuration cache""" +
+                """|The Daemon will expire """ +
+                """|The project memory settings """ +
+                """|The daemon will restart """ +
+                """|These settings can be adjusted """ +
+                """|The currently configured max heap """ +
+                """|For more information on how to set these """ +
+                """|To disable this warning, set """ +
+                """|Daemon will be stopped """ +
+            """)"""
+        )
+    }
+
+    private fun isNoisyLine(line: String): Boolean {
+        val trimmed = line.trim()
+        if (trimmed.isEmpty()) return false
+        return NOISY_LINE.containsMatchIn(trimmed)
+    }
+
     @Serializable
     data class GradleTaskResult(
         val exitCode: Int? = null,
@@ -94,7 +120,9 @@ class GradleToolset : McpToolset {
                     processHandler.addProcessListener(object : ProcessListener {
                         override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
                             if (outputType == ProcessOutputTypes.SYSTEM) return
-                            outputBuilder.append(event.text)
+                            val text = event.text
+                            if (text.lines().all { isNoisyLine(it) || it.isEmpty() }) return
+                            outputBuilder.append(text)
                         }
 
                         override fun processTerminated(event: ProcessEvent) {

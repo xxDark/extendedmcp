@@ -26,7 +26,7 @@ src/main/kotlin/dev/xdark/ijmcp/
   ListPackageClassesToolset.kt — list_package_classes
   AddMemberToolset.kt          — add_method, add_field
   AddImportToolset.kt          — add_import
-  DocumentationToolset.kt      — add_documentation, get_documentation
+  DocumentationToolset.kt      — add_documentation, get_documentation, missing_documentation
   ToolFilterToolset.kt         — list_tools_filter
   FilteredToolsProvider.kt     — McpToolsProvider that replaces built-in, applies filter
   ToolFilterState.kt           — Persists disabled tool names
