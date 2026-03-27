@@ -13,7 +13,6 @@ import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiJavaFile
-import com.intellij.psi.codeStyle.JavaCodeStyleManager
 import com.intellij.psi.search.GlobalSearchScope
 import dev.xdark.ijmcp.util.resolveFile
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +23,7 @@ import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.resolve.ImportPath
+import com.intellij.lang.java.JavaLanguage
 
 class AddImportToolset : McpToolset {
 
@@ -111,42 +111,36 @@ class AddImportToolset : McpToolset {
                 }
             }
         } else {
-            // Check if already imported
+            // Check if already imported (single or on-demand covering it)
             val alreadyImported = readAction {
-                javaFile.importList?.importStatements?.any {
-                    it.qualifiedName == fqName
-                } ?: false
+                val importList = javaFile.importList ?: return@readAction false
+                importList.importStatements.any { it.qualifiedName == fqName } ||
+                    importList.importStatements.any { it.isOnDemand && it.qualifiedName == fqName.substringBeforeLast('.') }
             }
             if (alreadyImported) {
                 return AddImportResult(added = false, import = fqName, message = "Import already exists")
             }
 
+            // Direct PSI manipulation — bypasses ImportFilter which can silently skip imports
             val psiClass = readAction {
                 JavaPsiFacade.getInstance(project).findClass(fqName, GlobalSearchScope.allScope(project))
             }
-            if (psiClass != null) {
-                withContext(Dispatchers.EDT) {
-                    WriteCommandAction.runWriteCommandAction(project) {
-                        JavaCodeStyleManager.getInstance(project).addImport(javaFile, psiClass)
+            withContext(Dispatchers.EDT) {
+                WriteCommandAction.runWriteCommandAction(project) {
+                    val factory = com.intellij.psi.PsiElementFactory.getInstance(project)
+                    val importStatement = if (psiClass != null) {
+                        factory.createImportStatement(psiClass)
+                    } else {
+                        // Class not in index — parse from text
+                        val dummyFile = com.intellij.psi.PsiFileFactory.getInstance(project).createFileFromText(
+                            "_Dummy_.java",
+                            JavaLanguage.INSTANCE,
+                            "import $fqName;\nclass _Dummy_ {}"
+                        ) as? PsiJavaFile
+                        dummyFile?.importList?.importStatements?.firstOrNull()
+                            ?: mcpFail("Failed to create import for: $fqName")
                     }
-                }
-            } else {
-                // Class not found in index — add import statement from text
-                withContext(Dispatchers.EDT) {
-                    WriteCommandAction.runWriteCommandAction(project) {
-                        val factory = com.intellij.psi.PsiElementFactory.getInstance(project)
-                        val refClass = factory.createReferenceElementByFQClassName(fqName, GlobalSearchScope.allScope(project))
-                        val importStatement = factory.createImportStatement(refClass.resolve() as? com.intellij.psi.PsiClass
-                            ?: run {
-                                // Fallback: create import from raw text
-                                val dummyClass = factory.createClass("_Dummy_")
-                                val stmt = factory.createImportStatement(dummyClass)
-                                // Replace via raw manipulation
-                                javaFile.importList?.add(stmt)
-                                mcpFail("Class not found: $fqName. For unresolvable imports, add manually.")
-                            })
-                        javaFile.importList?.add(importStatement)
-                    }
+                    javaFile.importList?.add(importStatement)
                 }
             }
         }

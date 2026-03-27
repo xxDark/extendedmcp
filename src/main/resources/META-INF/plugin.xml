@@ -34,6 +34,7 @@
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.AddMemberToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.AddImportToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.DocumentationToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.ReplaceMethodBodyToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.ToolFilterToolset"/>
         <mcpServer.mcpToolsProvider implementation="dev.xdark.ijmcp.FilteredToolsProvider"/>
     </extensions>

@@ -18,6 +18,7 @@ import dev.xdark.ijmcp.util.resolveFile
 import dev.xdark.ijmcp.util.resolveTargetElement
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.serialization.Serializable
+import com.intellij.psi.search.PsiShortNamesCache
 
 class ImplementationsToolset : McpToolset {
 
@@ -67,7 +68,29 @@ class ImplementationsToolset : McpToolset {
                 JavaPsiFacade.getInstance(project).findClass(className, searchScope)
                     ?: mcpFail("Class '$className' not found")
             }
+        } else if (filePath.isEmpty() && symbolName.isNotEmpty()) {
+            // No file given — try to find by FQN or short name via JavaPsiFacade
+            readAction {
+                val searchScope = GlobalSearchScope.allScope(project)
+                JavaPsiFacade.getInstance(project).findClass(symbolName, searchScope)
+            } ?: readAction {
+                // Try short name lookup
+                val searchScope = GlobalSearchScope.projectScope(project)
+                val classes = JavaPsiFacade.getInstance(project)
+                    .findClasses(symbolName, searchScope)
+                if (classes.size == 1) classes[0]
+                else if (classes.size > 1) mcpFail("Multiple classes found for '$symbolName'. Use className with fully qualified name, or specify filePath.")
+                else {
+                    // Try as short name via short names cache
+                    val shortNames = com.intellij.psi.search.PsiShortNamesCache.getInstance(project)
+                        .getClassesByName(symbolName, searchScope)
+                    if (shortNames.size == 1) shortNames[0]
+                    else if (shortNames.size > 1) mcpFail("Multiple classes found for '$symbolName': ${shortNames.mapNotNull { it.qualifiedName }}. Use className with fully qualified name.")
+                    else mcpFail("Class '$symbolName' not found. Provide filePath to locate the symbol in a specific file.")
+                }
+            }
         } else {
+            if (filePath.isEmpty()) mcpFail("Provide filePath, className, or symbolName to identify the target")
             val resolved = resolveFile(project, filePath)
             resolveTargetElement(resolved, symbolName, line, column)
         }

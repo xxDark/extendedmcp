@@ -115,8 +115,8 @@ class AddMemberToolset : McpToolset {
             if (classes.isEmpty()) mcpFail("No classes found in file")
 
             if (className.isNotEmpty()) {
-                classes.find { it.name == className }
-                    ?: mcpFail("Class '$className' not found in file. Available: ${classes.mapNotNull { it.name }}")
+                findJavaClassByName(classes, className)
+                    ?: mcpFail("Class '$className' not found in file. Available: ${collectJavaClassNames(classes)}")
             } else {
                 if (classes.size > 1) {
                     mcpFail("File contains multiple classes: ${classes.mapNotNull { it.name }}. Specify className.")
@@ -124,6 +124,24 @@ class AddMemberToolset : McpToolset {
                 classes[0]
             }
         }
+    }
+
+    private fun findJavaClassByName(classes: Array<PsiClass>, name: String): PsiClass? {
+        for (cls in classes) {
+            if (cls.name == name) return cls
+            val inner = findJavaClassByName(cls.innerClasses, name)
+            if (inner != null) return inner
+        }
+        return null
+    }
+
+    private fun collectJavaClassNames(classes: Array<PsiClass>): List<String> {
+        val names = mutableListOf<String>()
+        for (cls in classes) {
+            cls.name?.let { names.add(it) }
+            names.addAll(collectJavaClassNames(cls.innerClasses))
+        }
+        return names
     }
 
     private suspend fun findKotlinClass(
@@ -137,8 +155,8 @@ class AddMemberToolset : McpToolset {
             if (declarations.isEmpty()) mcpFail("No classes found in file")
 
             if (className.isNotEmpty()) {
-                declarations.find { it.name == className }
-                    ?: mcpFail("Class '$className' not found in file. Available: ${declarations.mapNotNull { it.name }}")
+                findKotlinClassByName(ktFile.declarations, className)
+                    ?: mcpFail("Class '$className' not found in file. Available: ${collectKotlinClassNames(ktFile.declarations)}")
             } else {
                 if (declarations.size > 1) {
                     mcpFail("File contains multiple classes: ${declarations.mapNotNull { it.name }}. Specify className.")
@@ -146,6 +164,30 @@ class AddMemberToolset : McpToolset {
                 declarations[0]
             }
         }
+    }
+
+    private fun findKotlinClassByName(declarations: List<org.jetbrains.kotlin.psi.KtDeclaration>, name: String): KtClassOrObject? {
+        for (decl in declarations) {
+            if (decl is KtClassOrObject) {
+                if (decl.name == name) return decl
+                val body = decl.body ?: continue
+                val inner = findKotlinClassByName(body.declarations, name)
+                if (inner != null) return inner
+            }
+        }
+        return null
+    }
+
+    private fun collectKotlinClassNames(declarations: List<org.jetbrains.kotlin.psi.KtDeclaration>): List<String> {
+        val names = mutableListOf<String>()
+        for (decl in declarations) {
+            if (decl is KtClassOrObject) {
+                decl.name?.let { names.add(it) }
+                val body = decl.body ?: continue
+                names.addAll(collectKotlinClassNames(body.declarations))
+            }
+        }
+        return names
     }
 
     private suspend fun addJavaMethod(
