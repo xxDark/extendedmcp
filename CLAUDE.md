@@ -26,6 +26,7 @@ src/main/kotlin/dev/xdark/ijmcp/
   ListPackageClassesToolset.kt — list_package_classes
   AddMemberToolset.kt          — add_method, add_field
   AddImportToolset.kt          — add_import
+  ReplaceMethodBodyToolset.kt  — replace_method_body
   DocumentationToolset.kt      — add_documentation, get_documentation, missing_documentation
   ToolFilterToolset.kt         — list_tools_filter
   FilteredToolsProvider.kt     — McpToolsProvider that replaces built-in, applies filter
@@ -114,3 +115,5 @@ User toggles tools via **Tools > MCP Tool Filter** (checkbox dialog). The `list_
 - **Windows path relativization**: `relativizeIfPossible` throws `IllegalArgumentException` when paths are on different drives (e.g. JDK on D:\ vs project on F:\). Always wrap in try-catch.
 - **Dependency scoping**: The `api("io.modelcontextprotocol:kotlin-sdk-server:...")` dependency in `build.gradle.kts` is for source browsing only. Using `api` or `implementation` causes `buildPlugin` to embed it into the plugin jar, creating classloader conflicts with the built-in MCP server plugin (e.g. "is not serializable" errors). Keep it as `compileOnly` or accept the embedding risk.
 - **McpToolset type restrictions**: `ReflectionToolsProvider` requires tool parameters to be simple types (`String`, `Boolean`, `Int`) — `List<T>` parameters silently prevent the tool from registering. Return types must be `@Serializable data class` with properties — `List<T>` returns cause `IllegalStateException: Properties are expected in return type`. Workaround: use delimited strings (e.g. semicolon-separated) for multi-value params, and wrap list results in a data class.
+- **ImportFilter blocks addImport**: `JavaCodeStyleManager.addImport()` delegates to `ImportHelper` which checks `ImportFilter.shouldImport()`. Registered `ImportFilter` extensions can silently prevent imports from being added. For explicit import insertion, use `PsiElementFactory.createImportStatement(psiClass)` + `importList.add()` to bypass filters.
+- **Inner class lookup**: `PsiClassOwner.classes` only returns top-level classes. To find inner/nested classes, recursively search `PsiClass.innerClasses` (Java) or `KtClassBody.declarations` (Kotlin).
