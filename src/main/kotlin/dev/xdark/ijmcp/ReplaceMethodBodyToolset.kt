@@ -66,7 +66,7 @@ class ReplaceMethodBodyToolset : McpToolset {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, filePath)
 
-        val isKotlin = readAction { resolved.psiFile is KtFile }
+        val isKotlin = resolved.psiFile is KtFile
 
         val result = if (isKotlin) {
             replaceKotlinBody(resolved, methodName, newBody, className, memberIndex)
@@ -294,7 +294,10 @@ class ReplaceMethodBodyToolset : McpToolset {
         return names
     }
 
-    private fun findKotlinClassByName(declarations: List<org.jetbrains.kotlin.psi.KtDeclaration>, name: String): KtClassOrObject? {
+    private fun findKotlinClassByName(
+        declarations: List<org.jetbrains.kotlin.psi.KtDeclaration>,
+        name: String
+    ): KtClassOrObject? {
         for (decl in declarations) {
             if (decl is KtClassOrObject) {
                 if (decl.name == name) return decl

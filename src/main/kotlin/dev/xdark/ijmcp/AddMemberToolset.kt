@@ -14,14 +14,12 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiClassOwner
 import com.intellij.psi.PsiElementFactory
-import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.codeStyle.JavaCodeStyleManager
 import dev.xdark.ijmcp.util.resolveFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import org.jetbrains.kotlin.psi.KtClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtPsiFactory
@@ -60,7 +58,7 @@ class AddMemberToolset : McpToolset {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, filePath)
 
-        val isKotlin = readAction { resolved.psiFile is KtFile }
+        val isKotlin = resolved.psiFile is KtFile
 
         if (isKotlin) {
             return addKotlinMethod(resolved, methodText, className)
@@ -95,7 +93,7 @@ class AddMemberToolset : McpToolset {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, filePath)
 
-        val isKotlin = readAction { resolved.psiFile is KtFile }
+        val isKotlin = resolved.psiFile is KtFile
 
         if (isKotlin) {
             return addKotlinProperty(resolved, fieldText, className)
@@ -166,7 +164,10 @@ class AddMemberToolset : McpToolset {
         }
     }
 
-    private fun findKotlinClassByName(declarations: List<org.jetbrains.kotlin.psi.KtDeclaration>, name: String): KtClassOrObject? {
+    private fun findKotlinClassByName(
+        declarations: List<org.jetbrains.kotlin.psi.KtDeclaration>,
+        name: String
+    ): KtClassOrObject? {
         for (decl in declarations) {
             if (decl is KtClassOrObject) {
                 if (decl.name == name) return decl

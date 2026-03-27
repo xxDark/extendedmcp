@@ -12,13 +12,7 @@ import com.intellij.openapi.application.readAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.intellij.psi.JavaPsiFacade
-import com.intellij.psi.PsiClass
-import com.intellij.psi.PsiClassOwner
-import com.intellij.psi.PsiDocCommentOwner
-import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiElementFactory
-import com.intellij.psi.PsiModifier
+import com.intellij.psi.*
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.PsiTreeUtil
 import dev.xdark.ijmcp.util.ResolvedFile
@@ -29,15 +23,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import org.jetbrains.kotlin.kdoc.psi.api.KDoc
 import org.jetbrains.kotlin.lexer.KtTokens
-import org.jetbrains.kotlin.psi.KtClass
-import org.jetbrains.kotlin.psi.KtClassOrObject
-import org.jetbrains.kotlin.psi.KtEnumEntry
-import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.psi.KtNamedDeclaration
-import org.jetbrains.kotlin.psi.KtNamedFunction
-import org.jetbrains.kotlin.psi.KtObjectDeclaration
-import org.jetbrains.kotlin.psi.KtProperty
-import org.jetbrains.kotlin.psi.KtPsiFactory
+import org.jetbrains.kotlin.psi.*
 
 class DocumentationToolset : McpToolset {
 
@@ -108,7 +94,7 @@ class DocumentationToolset : McpToolset {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, filePath)
 
-        val isKotlin = readAction { resolved.psiFile is KtFile }
+        val isKotlin = resolved.psiFile is KtFile
 
         return if (isKotlin) {
             addKotlinDoc(resolved, documentation, className, memberName, memberIndex)
@@ -223,13 +209,15 @@ class DocumentationToolset : McpToolset {
                         cls.isAnnotationType -> "annotation"
                         else -> "class"
                     }
-                    undocumented.add(UndocumentedElement(
-                        kind = kind,
-                        name = cls.name ?: "<anonymous>",
-                        line = docLineOf(cls, document),
-                        signature = cls.qualifiedName ?: cls.name ?: "",
-                        className = parentName,
-                    ))
+                    undocumented.add(
+                        UndocumentedElement(
+                            kind = kind,
+                            name = cls.name ?: "<anonymous>",
+                            line = docLineOf(cls, document),
+                            signature = cls.qualifiedName ?: cls.name ?: "",
+                            className = parentName,
+                        )
+                    )
                 }
 
                 for (field in cls.fields) {
@@ -240,14 +228,20 @@ class DocumentationToolset : McpToolset {
                     if (field.docComment != null) {
                         documented++
                     } else {
-                        val typeName = try { field.type.presentableText } catch (_: Exception) { "?" }
-                        undocumented.add(UndocumentedElement(
-                            kind = "field",
-                            name = field.name,
-                            line = docLineOf(field, document),
-                            signature = "$typeName ${field.name}",
-                            className = cls.name ?: "",
-                        ))
+                        val typeName = try {
+                            field.type.presentableText
+                        } catch (_: Exception) {
+                            "?"
+                        }
+                        undocumented.add(
+                            UndocumentedElement(
+                                kind = "field",
+                                name = field.name,
+                                line = docLineOf(field, document),
+                                signature = "$typeName ${field.name}",
+                                className = cls.name ?: "",
+                            )
+                        )
                     }
                 }
 
@@ -260,17 +254,27 @@ class DocumentationToolset : McpToolset {
                         documented++
                     } else {
                         val params = method.parameterList.parameters.joinToString(", ") { p ->
-                            val typeName = try { p.type.presentableText } catch (_: Exception) { "?" }
+                            val typeName = try {
+                                p.type.presentableText
+                            } catch (_: Exception) {
+                                "?"
+                            }
                             "$typeName ${p.name}"
                         }
-                        val returnType = try { method.returnType?.presentableText ?: "void" } catch (_: Exception) { "?" }
-                        undocumented.add(UndocumentedElement(
-                            kind = if (method.isConstructor) "constructor" else "method",
-                            name = method.name,
-                            line = docLineOf(method, document),
-                            signature = "$returnType ${method.name}($params)",
-                            className = cls.name ?: "",
-                        ))
+                        val returnType = try {
+                            method.returnType?.presentableText ?: "void"
+                        } catch (_: Exception) {
+                            "?"
+                        }
+                        undocumented.add(
+                            UndocumentedElement(
+                                kind = if (method.isConstructor) "constructor" else "method",
+                                name = method.name,
+                                line = docLineOf(method, document),
+                                signature = "$returnType ${method.name}($params)",
+                                className = cls.name ?: "",
+                            )
+                        )
                     }
                 }
 
@@ -312,7 +316,10 @@ class DocumentationToolset : McpToolset {
             fun isPrivate(decl: KtNamedDeclaration): Boolean =
                 decl.hasModifier(KtTokens.PRIVATE_KEYWORD)
 
-            fun processDeclarations(declarations: List<org.jetbrains.kotlin.psi.KtDeclaration>, parentClassName: String) {
+            fun processDeclarations(
+                declarations: List<org.jetbrains.kotlin.psi.KtDeclaration>,
+                parentClassName: String
+            ) {
                 for (decl in declarations) {
                     when (decl) {
                         is KtEnumEntry -> continue
@@ -330,18 +337,21 @@ class DocumentationToolset : McpToolset {
                                     (decl as? KtClass)?.isEnum() == true -> "enum"
                                     else -> "class"
                                 }
-                                undocumented.add(UndocumentedElement(
-                                    kind = kind,
-                                    name = decl.name ?: "<anonymous>",
-                                    line = docLineOf(decl, document),
-                                    signature = "$kind ${decl.name}",
-                                    className = parentClassName,
-                                ))
+                                undocumented.add(
+                                    UndocumentedElement(
+                                        kind = kind,
+                                        name = decl.name ?: "<anonymous>",
+                                        line = docLineOf(decl, document),
+                                        signature = "$kind ${decl.name}",
+                                        className = parentClassName,
+                                    )
+                                )
                             }
 
                             val body = decl.body ?: continue
                             processDeclarations(body.declarations, decl.name ?: "")
                         }
+
                         is KtNamedFunction -> {
                             if (!includePrivate && isPrivate(decl)) continue
 
@@ -353,15 +363,18 @@ class DocumentationToolset : McpToolset {
                                     "${p.name ?: "_"}: ${p.typeReference?.text ?: "Any"}"
                                 }
                                 val ret = decl.typeReference?.text?.let { ": $it" } ?: ""
-                                undocumented.add(UndocumentedElement(
-                                    kind = "function",
-                                    name = decl.name ?: "<anonymous>",
-                                    line = docLineOf(decl, document),
-                                    signature = "fun ${decl.name}($params)$ret",
-                                    className = parentClassName,
-                                ))
+                                undocumented.add(
+                                    UndocumentedElement(
+                                        kind = "function",
+                                        name = decl.name ?: "<anonymous>",
+                                        line = docLineOf(decl, document),
+                                        signature = "fun ${decl.name}($params)$ret",
+                                        className = parentClassName,
+                                    )
+                                )
                             }
                         }
+
                         is KtProperty -> {
                             if (!includePrivate && isPrivate(decl)) continue
 
@@ -371,13 +384,15 @@ class DocumentationToolset : McpToolset {
                             } else {
                                 val keyword = if (decl.isVar) "var" else "val"
                                 val type = decl.typeReference?.text?.let { ": $it" } ?: ""
-                                undocumented.add(UndocumentedElement(
-                                    kind = "property",
-                                    name = decl.name ?: "<anonymous>",
-                                    line = docLineOf(decl, document),
-                                    signature = "$keyword ${decl.name}$type",
-                                    className = parentClassName,
-                                ))
+                                undocumented.add(
+                                    UndocumentedElement(
+                                        kind = "property",
+                                        name = decl.name ?: "<anonymous>",
+                                        line = docLineOf(decl, document),
+                                        signature = "$keyword ${decl.name}$type",
+                                        className = parentClassName,
+                                    )
+                                )
                             }
                         }
                     }
@@ -410,7 +425,15 @@ class DocumentationToolset : McpToolset {
 
             if (memberName.isEmpty()) {
                 val doc = (psiClass as? PsiDocCommentOwner)?.docComment?.text
-                GetDocResult(listOf(DocEntry(psiClass.name ?: "<anonymous>", "class ${compiledClass.qualifiedName}", doc)))
+                GetDocResult(
+                    listOf(
+                        DocEntry(
+                            psiClass.name ?: "<anonymous>",
+                            "class ${compiledClass.qualifiedName}",
+                            doc
+                        )
+                    )
+                )
             } else {
                 val methods = psiClass.findMethodsByName(memberName, false)
                 val field = psiClass.findFieldByName(memberName, false)
@@ -431,7 +454,15 @@ class DocumentationToolset : McpToolset {
                     })
                 } else if (field != null) {
                     val srcField = (field.navigationElement as? PsiDocCommentOwner) ?: field
-                    GetDocResult(listOf(DocEntry(field.name ?: memberName, field.text.lines().first().trim(), srcField.docComment?.text)))
+                    GetDocResult(
+                        listOf(
+                            DocEntry(
+                                field.name ?: memberName,
+                                field.text.lines().first().trim(),
+                                srcField.docComment?.text
+                            )
+                        )
+                    )
                 } else {
                     mcpFail("Member '$memberName' not found in class '$qualifiedClassName'")
                 }
@@ -478,7 +509,15 @@ class DocumentationToolset : McpToolset {
                         DocEntry(m.name, "$memberName($params)", m.docComment?.text)
                     })
                 } else if (field != null) {
-                    GetDocResult(listOf(DocEntry(field.name ?: memberName, field.text.lines().first().trim(), field.docComment?.text)))
+                    GetDocResult(
+                        listOf(
+                            DocEntry(
+                                field.name ?: memberName,
+                                field.text.lines().first().trim(),
+                                field.docComment?.text
+                            )
+                        )
+                    )
                 } else {
                     mcpFail("Member '$memberName' not found in class '${psiClass.name}'")
                 }
@@ -519,7 +558,12 @@ class DocumentationToolset : McpToolset {
                     if (classes.size == 1) {
                         val ktClass = classes[0]
                         val body = ktClass.body ?: mcpFail("Class '${ktClass.name}' has no body")
-                        getKotlinMemberDocs(body.declarations, memberName, memberIndex, "as top-level or in class '${ktClass.name}'")
+                        getKotlinMemberDocs(
+                            body.declarations,
+                            memberName,
+                            memberIndex,
+                            "as top-level or in class '${ktClass.name}'"
+                        )
                     } else {
                         mcpFail("'$memberName' not found as a top-level declaration")
                     }
@@ -554,12 +598,24 @@ class DocumentationToolset : McpToolset {
                 val params = func.valueParameters.joinToString(", ") { p ->
                     "${p.name ?: "_"}: ${p.typeReference?.text ?: "Any"}"
                 }
-                DocEntry(func.name ?: memberName, "$memberName($params)", PsiTreeUtil.getChildOfType(f, KDoc::class.java)?.text)
+                DocEntry(
+                    func.name ?: memberName,
+                    "$memberName($params)",
+                    PsiTreeUtil.getChildOfType(f, KDoc::class.java)?.text
+                )
             })
         }
         if (properties.isNotEmpty()) {
             val prop = properties[0] as KtProperty
-            return GetDocResult(listOf(DocEntry(prop.name ?: memberName, prop.text.lines().first().trim(), PsiTreeUtil.getChildOfType(prop, KDoc::class.java)?.text)))
+            return GetDocResult(
+                listOf(
+                    DocEntry(
+                        prop.name ?: memberName,
+                        prop.text.lines().first().trim(),
+                        PsiTreeUtil.getChildOfType(prop, KDoc::class.java)?.text
+                    )
+                )
+            )
         }
         mcpFail("'$memberName' not found $context")
     }
@@ -582,7 +638,10 @@ class DocumentationToolset : McpToolset {
         return names
     }
 
-    private fun findKotlinClassByName(declarations: List<org.jetbrains.kotlin.psi.KtDeclaration>, name: String): KtClassOrObject? {
+    private fun findKotlinClassByName(
+        declarations: List<org.jetbrains.kotlin.psi.KtDeclaration>,
+        name: String
+    ): KtClassOrObject? {
         for (decl in declarations) {
             if (decl is KtClassOrObject) {
                 if (decl.name == name) return decl
@@ -754,7 +813,8 @@ class DocumentationToolset : McpToolset {
                 } else {
                     val body = ktClass.body
                         ?: mcpFail("Class '${ktClass.name}' has no body")
-                    val member = resolveKotlinMember(body.declarations, memberName, memberIndex, "in class '${ktClass.name}'")
+                    val member =
+                        resolveKotlinMember(body.declarations, memberName, memberIndex, "in class '${ktClass.name}'")
                     val existing = PsiTreeUtil.getChildOfType(member, KDoc::class.java)
                     Triple(member, (member as? KtNamedDeclaration)?.name ?: memberName, existing != null)
                 }
@@ -775,7 +835,12 @@ class DocumentationToolset : McpToolset {
                         val ktClass = classes[0]
                         val body = ktClass.body
                             ?: mcpFail("Class '${ktClass.name}' has no body")
-                        val member = resolveKotlinMember(body.declarations, memberName, memberIndex, "as top-level or in class '${ktClass.name}'")
+                        val member = resolveKotlinMember(
+                            body.declarations,
+                            memberName,
+                            memberIndex,
+                            "as top-level or in class '${ktClass.name}'"
+                        )
                         val existing = PsiTreeUtil.getChildOfType(member, KDoc::class.java)
                         Triple(member, (member as? KtNamedDeclaration)?.name ?: memberName, existing != null)
                     } else {

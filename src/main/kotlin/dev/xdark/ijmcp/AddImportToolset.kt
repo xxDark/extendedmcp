@@ -2,6 +2,7 @@
 
 package dev.xdark.ijmcp
 
+import com.intellij.lang.java.JavaLanguage
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
@@ -23,7 +24,6 @@ import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtPsiFactory
 import org.jetbrains.kotlin.resolve.ImportPath
-import com.intellij.lang.java.JavaLanguage
 
 class AddImportToolset : McpToolset {
 
@@ -57,7 +57,7 @@ class AddImportToolset : McpToolset {
     ): AddImportsResult {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, filePath)
-        val isKotlin = readAction { resolved.psiFile is KtFile }
+        val isKotlin = resolved.psiFile is KtFile
 
         val results = fqNames.split(';').filter { it.isNotBlank() }.map { fqName ->
             val trimmed = fqName.trim()
@@ -82,10 +82,8 @@ class AddImportToolset : McpToolset {
     ): AddImportResult {
         val project = resolved.psiFile.project
 
-        val javaFile = readAction {
-            resolved.psiFile as? PsiJavaFile
+        val javaFile = resolved.psiFile as? PsiJavaFile
                 ?: mcpFail("File is not a Java file")
-        }
 
         if (isStatic) {
             val lastDot = fqName.lastIndexOf('.')
@@ -155,10 +153,8 @@ class AddImportToolset : McpToolset {
     ): AddImportResult {
         val project = resolved.psiFile.project
 
-        val ktFile = readAction {
-            resolved.psiFile as? KtFile
+        val ktFile = resolved.psiFile as? KtFile
                 ?: mcpFail("File is not a Kotlin file")
-        }
 
         // Check if already imported
         val alreadyImported = readAction {
