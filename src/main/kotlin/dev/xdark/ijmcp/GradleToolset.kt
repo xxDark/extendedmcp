@@ -75,6 +75,7 @@ class GradleToolset : McpToolset {
         @McpDescription("Space-separated Gradle task names (e.g. 'build', 'clean test', 'dependencies')") tasks: String,
         @McpDescription("Additional command-line arguments (e.g. '--info', '--tests com.example.MyTest')") arguments: String = "",
         @McpDescription("Timeout in milliseconds (default 120000)") timeout: Int = 120000,
+        @McpDescription("If true (default), only prints 'BUILD SUCCESSFUL in Xs' on success. Full output on failure.") compact: Boolean = true,
     ): GradleTaskResult {
         val project = currentCoroutineContext().project
 
@@ -153,10 +154,16 @@ class GradleToolset : McpToolset {
         }
 
         val output = outputBuilder.toString()
+        val success = exitCode == 0
+        val displayOutput = if (compact && success) {
+            "BUILD SUCCESSFUL"
+        } else {
+            output
+        }
         return GradleTaskResult(
             exitCode = exitCode,
-            success = exitCode == 0,
-            output = output,
+            success = success,
+            output = displayOutput,
             timedOut = exitCode == null,
         )
     }
