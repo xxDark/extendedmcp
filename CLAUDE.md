@@ -29,6 +29,7 @@ src/main/kotlin/dev/xdark/ijmcp/
   ReplaceMethodBodyToolset.kt  — replace_method_body
   DocumentationToolset.kt      — add_documentation, get_documentation, missing_documentation
   FindInFilesToolset.kt        — find_in_files
+  BatchProblemsToolset.kt      — get_batch_file_problems
   ToolFilterToolset.kt         — list_tools_filter
   FilteredToolsProvider.kt     — McpToolsProvider that replaces built-in, applies filter
   ToolFilterState.kt           — Persists disabled tool names
