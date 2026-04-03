@@ -30,7 +30,6 @@ class CreateFileToolset : McpToolset {
         """
         |Creates a new file at the specified path within the project directory and populates it with text.
         |Creates any necessary parent directories automatically.
-        |The file content is saved to disk immediately after creation.
     """
     )
     suspend fun create_file(
