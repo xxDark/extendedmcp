@@ -18,11 +18,9 @@ import kotlin.io.path.name
 import kotlin.io.path.pathString
 
 // Replacement for the built-in create_new_file tool.
-// The built-in version calls document.setText() but never calls saveDocument(),
-// leaving content in the in-memory Document buffer without flushing to disk.
-// This causes intermittent "file created but empty" issues when other tools
-// (or external processes) read the file from disk/VFS before auto-save kicks in.
-// TODO: Remove once I confirm if that's the case or not...
+// The built-in version's parameter is named "content", but models sometimes send
+// "text" or vice versa. With a default value, a name mismatch silently produces
+// an empty file. Making the parameter required turns this into a loud error.
 class CreateFileToolset : McpToolset {
 
     @McpTool
@@ -36,7 +34,7 @@ class CreateFileToolset : McpToolset {
         @McpDescription("Path where the file should be created relative to the project root")
         pathInProject: String,
         @McpDescription("Content to write into the new file")
-        text: String = "",
+        content: String,
         @McpDescription("Whether to overwrite an existing file. If false, an error is returned if the file exists.")
         overwrite: Boolean = false,
     ) {
@@ -52,7 +50,7 @@ class CreateFileToolset : McpToolset {
                 val createdFile = parent.findOrCreateFile(path.name)
                 val document = FileDocumentManager.getInstance().getDocument(createdFile)
                     ?: mcpFail("Cannot get document for: $pathInProject")
-                document.setText(text)
+                document.setText(content)
                 FileDocumentManager.getInstance().saveDocument(document)
             }
         } catch (e: IOException) {

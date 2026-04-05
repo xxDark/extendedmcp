@@ -2,6 +2,7 @@
 
 package dev.xdark.ijmcp
 
+import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.execution.executors.DefaultRunExecutor
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
@@ -65,6 +66,9 @@ class GradleToolset : McpToolset {
         |This is equivalent to running "./gradlew <tasks> <arguments>" but through IntelliJ's Gradle integration,
         |which uses the project's configured Gradle wrapper, JDK, and settings.
         |
+        |When debug=true, the task is started with the debugger attached. Set breakpoints first using
+        |debug_add_breakpoint, then use debug_wait_for_suspension to wait for the first breakpoint hit.
+        |
         |Examples:
         |  tasks="build", arguments=""
         |  tasks="test", arguments="--tests com.example.MyTest"
@@ -76,6 +80,7 @@ class GradleToolset : McpToolset {
         @McpDescription("Additional command-line arguments (e.g. '--info', '--tests com.example.MyTest')") arguments: String = "",
         @McpDescription("Timeout in milliseconds (default 120000)") timeout: Int = 120000,
         @McpDescription("If true (default), only prints 'BUILD SUCCESSFUL in Xs' on success. Full output on failure.") compact: Boolean = true,
+        @McpDescription("If true, starts the task with the debugger attached. Returns immediately after the process starts.") debug: Boolean = false,
     ): GradleTaskResult {
         val project = currentCoroutineContext().project
 
@@ -92,29 +97,35 @@ class GradleToolset : McpToolset {
             settings, project, GradleConstants.SYSTEM_ID
         ) ?: mcpFail("Failed to create Gradle run configuration")
 
-        val executor = DefaultRunExecutor.getRunExecutorInstance()
-            ?: mcpFail("Execution is not supported in this environment")
+        val executor = if (debug) {
+            DefaultDebugExecutor.getDebugExecutorInstance()
+                ?: mcpFail("Debug execution is not supported in this environment")
+        } else {
+            DefaultRunExecutor.getRunExecutorInstance()
+                ?: mcpFail("Execution is not supported in this environment")
+        }
 
+        val processStartedDeferred = CompletableDeferred<Unit>()
         val exitCodeDeferred = CompletableDeferred<Int>()
         val outputBuilder = StringBuilder()
 
         withContext(Dispatchers.EDT) {
             val runner = ProgramRunner.getRunner(executor.id, runnerAndConfigSettings.configuration)
-                ?: mcpFail("No suitable runner found for Gradle task execution")
+                ?: mcpFail("No suitable runner found for ${if (debug) "debug" else "run"} execution")
 
             val callback = object : ProgramRunner.Callback {
                 override fun processNotStarted(error: Throwable?) {
-                    exitCodeDeferred.completeExceptionally(
-                        error ?: IllegalStateException("Gradle task not started")
-                    )
+                    val ex = error ?: IllegalStateException("Gradle task not started")
+                    processStartedDeferred.completeExceptionally(ex)
+                    exitCodeDeferred.completeExceptionally(ex)
                 }
 
                 override fun processStarted(descriptor: RunContentDescriptor) {
                     val processHandler = descriptor.processHandler
                     if (processHandler == null) {
-                        exitCodeDeferred.completeExceptionally(
-                            IllegalStateException("Process handler is null")
-                        )
+                        val ex = IllegalStateException("Process handler is null")
+                        processStartedDeferred.completeExceptionally(ex)
+                        exitCodeDeferred.completeExceptionally(ex)
                         return
                     }
 
@@ -131,18 +142,36 @@ class GradleToolset : McpToolset {
                         }
 
                         override fun processNotStarted() {
-                            exitCodeDeferred.completeExceptionally(
-                                IllegalStateException("Gradle process not started")
-                            )
+                            val ex = IllegalStateException("Gradle process not started")
+                            processStartedDeferred.completeExceptionally(ex)
+                            exitCodeDeferred.completeExceptionally(ex)
                         }
                     })
                     processHandler.startNotify()
+                    processStartedDeferred.complete(Unit)
                 }
             }
 
             val environment = ExecutionEnvironmentBuilder.create(project, executor, runnerAndConfigSettings.configuration).build()
             environment.callback = callback
             runner.execute(environment)
+        }
+
+        // In debug mode, return as soon as the process starts — don't wait for termination
+        if (debug) {
+            withTimeoutOrNull(timeout.toLong()) {
+                try {
+                    processStartedDeferred.await()
+                } catch (e: Exception) {
+                    mcpFail("Failed to start debug session: ${e.message}")
+                }
+            } ?: mcpFail("Timeout waiting for debug session to start")
+
+            return GradleTaskResult(
+                exitCode = null,
+                success = true,
+                output = "Debug session started for task: $tasks. Use debug_wait_for_suspension to wait for a breakpoint hit.",
+            )
         }
 
         val exitCode = withTimeoutOrNull(timeout.toLong()) {
