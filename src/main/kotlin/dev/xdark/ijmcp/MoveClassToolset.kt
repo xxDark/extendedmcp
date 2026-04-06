@@ -9,8 +9,10 @@ import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.readAction
+import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.psi.PsiClassOwner
+import com.intellij.psi.PsiDirectory
 import com.intellij.psi.PsiManager
 import com.intellij.refactoring.PackageWrapper
 import com.intellij.refactoring.move.moveClassesOrPackages.AutocreatingSingleSourceRootMoveDestination
@@ -23,7 +25,8 @@ import kotlinx.coroutines.withContext
 class MoveClassToolset : McpToolset {
 
     @McpTool
-    @McpDescription("""
+    @McpDescription(
+        """
         |Moves a class to a different package (like F6 / Refactor > Move in IntelliJ).
         |
         |Automatically updates all references, imports, and package declarations across the project.
@@ -32,7 +35,8 @@ class MoveClassToolset : McpToolset {
         |Examples:
         |  filePath="src/main/kotlin/com/example/Foo.kt", targetPackage="com.example.util"
         |  filePath="src/main/java/com/example/MyService.java", targetPackage="com.example.service"
-    """)
+    """
+    )
     suspend fun move_class(
         @McpDescription("Path relative to the project root") filePath: String,
         @McpDescription("Fully qualified target package name (e.g. 'com.example.util')") targetPackage: String,
@@ -65,8 +69,11 @@ class MoveClassToolset : McpToolset {
                 mcpFail("Cannot move to '$targetPackage': $verifyError")
             }
 
-            // Get/create the target directory
-            val targetDir = destination.getTargetDirectory(resolved.psiFile)
+            // Get/create the target directory — write action needed for directory creation
+            val targetDir = WriteCommandAction.writeCommandAction(project)
+                .compute<PsiDirectory, RuntimeException> {
+                    destination.getTargetDirectory(resolved.psiFile)
+                }
 
             // Move the file (not classes) — this triggers MoveFileHandler EPs
             // which correctly update package declarations for both Java and Kotlin
