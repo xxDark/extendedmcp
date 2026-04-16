@@ -34,6 +34,7 @@ src/main/kotlin/dev/xdark/ijmcp/
   DocumentationToolset.kt      — add_documentation, get_documentation, missing_documentation
   FindInFilesToolset.kt        — find_in_files
   BatchProblemsToolset.kt      — get_batch_file_problems
+  BatchFileTextToolset.kt      — batch_get_file_text
   CreateFileToolset.kt         — create_file
   RenameMemberToolset.kt       — rename_member
   ToolFilterToolset.kt         — list_tools_filter

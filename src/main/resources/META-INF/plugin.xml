@@ -37,6 +37,7 @@
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.ReplaceMethodBodyToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.FindInFilesToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.BatchProblemsToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.BatchFileTextToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.CreateFileToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.RenameMemberToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.DebuggerToolset"/>
