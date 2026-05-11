@@ -44,7 +44,6 @@ src/main/kotlin/dev/xdark/ijmcp/
   McpMetricsService.kt         — Tool call counting + persistence
   McpMetricsAction.kt          — Tools menu UI for viewing metrics
 src/main/resources/META-INF/plugin.xml  — Toolset registrations
-mcp-server/                    — Decompiled built-in MCP server sources (reference only)
 ```
 
 ## Build
