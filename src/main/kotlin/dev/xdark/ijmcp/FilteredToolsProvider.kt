@@ -4,6 +4,7 @@ import com.intellij.mcpserver.McpTool
 import com.intellij.mcpserver.McpToolsProvider
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.impl.util.asTools
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.logger
 
 class FilteredToolsProvider : McpToolsProvider {
@@ -14,6 +15,10 @@ class FilteredToolsProvider : McpToolsProvider {
     override fun getTools(): List<McpTool> {
         if (!initialized) {
             initialize()
+            // Return empty on the first call: other providers (including ReflectionToolsProvider)
+            // already return tools in the same getMcpTools() iteration. A deferred triggerRefresh()
+            // scheduled by initialize() will re-evaluate with only this provider remaining.
+            return emptyList()
         }
 
         val toolsetTools = McpToolset.EP.extensionList.flatMap { toolset ->
@@ -71,6 +76,13 @@ class FilteredToolsProvider : McpToolsProvider {
         }, false)
 
         LOG.info("FilteredToolsProvider initialized: ${cachedProviderTools.size} cached provider tools")
+
+        // The MCP server's ExtensionPointListener is registered AFTER the initial
+        // getMcpTools() call that triggers our initialization. Schedule a deferred
+        // refresh so the server re-evaluates tools with only this provider remaining.
+        ApplicationManager.getApplication().invokeLater {
+            triggerRefresh()
+        }
     }
 
     companion object {
