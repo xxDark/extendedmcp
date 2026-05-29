@@ -13,9 +13,9 @@ import kotlinx.coroutines.currentCoroutineContext
 
 class LibrarySourcesToolset : McpToolset {
 
-    @McpTool
-    @McpDescription(
-        """
+	@McpTool
+	@McpDescription(
+		"""
         |Checks which project libraries have their sources downloaded.
         |
         |Libraries without sources limit IDE features like "Find Implementations" and "Go to Source".
@@ -23,44 +23,44 @@ class LibrarySourcesToolset : McpToolset {
         |  - Gradle: Settings > Build > Build Tools > Gradle > check "Download sources"
         |  - Or right-click a dependency in the Project view > Download Sources
     """
-    )
-    suspend fun check_library_sources(): Any {
-        val project = currentCoroutineContext().project
+	)
+	suspend fun check_library_sources(): Any {
+		val project = currentCoroutineContext().project
 
-        return readAction {
-            val withSourcesCount = intArrayOf(0)
-            val withoutSourceNames = mutableListOf<String>()
+		return readAction {
+			val withSourcesCount = intArrayOf(0)
+			val withoutSourceNames = mutableListOf<String>()
 
-            OrderEnumerator.orderEntries(project).forEachLibrary { library ->
-                val name = library.name ?: "unknown"
-                if (library.getFiles(OrderRootType.SOURCES).isNotEmpty()) {
-                    withSourcesCount[0]++
-                } else {
-                    withoutSourceNames.add(name)
-                }
-                true
-            }
+			OrderEnumerator.orderEntries(project).forEachLibrary { library ->
+				val name = library.name ?: "unknown"
+				if (library.getFiles(OrderRootType.SOURCES).isNotEmpty()) {
+					withSourcesCount[0]++
+				} else {
+					withoutSourceNames.add(name)
+				}
+				true
+			}
 
-            val total = withSourcesCount[0] + withoutSourceNames.size
+			val total = withSourcesCount[0] + withoutSourceNames.size
 
-            buildString {
-                append("Library sources summary: ")
-                append(total)
-                append(" total, ")
-                append(withSourcesCount[0])
-                append(" with sources, ")
-                append(withoutSourceNames.size)
-                append(" without sources\n")
+			buildString {
+				append("Library sources summary: ")
+				append(total)
+				append(" total, ")
+				append(withSourcesCount[0])
+				append(" with sources, ")
+				append(withoutSourceNames.size)
+				append(" without sources\n")
 
-                if (withoutSourceNames.isNotEmpty()) {
-                    append("\nMissing sources:\n")
-                    for (name in withoutSourceNames) {
-                        append("  ")
-                        append(name)
-                        append("\n")
-                    }
-                }
-            }
-        }
-    }
+				if (withoutSourceNames.isNotEmpty()) {
+					append("\nMissing sources:\n")
+					for (name in withoutSourceNames) {
+						append("  ")
+						append(name)
+						append("\n")
+					}
+				}
+			}
+		}
+	}
 }

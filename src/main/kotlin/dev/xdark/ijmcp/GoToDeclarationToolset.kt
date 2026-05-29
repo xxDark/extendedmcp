@@ -19,84 +19,84 @@ import kotlinx.coroutines.currentCoroutineContext
 
 class GoToDeclarationToolset : McpToolset {
 
-    @McpTool
-    @McpDescription(
-        """
+	@McpTool
+	@McpDescription(
+		"""
         |Navigates to the declaration of the symbol at the given position.
         |Returns the declaration's file location and a code snippet around it.
         |This is the same as Ctrl+Click / Go to Declaration in the IDE.
         |
         |Useful for quickly understanding what a symbol is without reading the whole file.
     """
-    )
-    suspend fun go_to_declaration(
-        @McpDescription("Path relative to the project root") file_path: String,
-        @McpDescription("1-based line number") line: Int,
-        @McpDescription("1-based column number") column: Int,
-        @McpDescription("Number of context lines around the declaration (default 5)") context_lines: Int = 5,
-    ): Any {
-        val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, file_path)
+	)
+	suspend fun go_to_declaration(
+		@McpDescription("Path relative to the project root") file_path: String,
+		@McpDescription("1-based line number") line: Int,
+		@McpDescription("1-based column number") column: Int,
+		@McpDescription("Number of context lines around the declaration (default 5)") context_lines: Int = 5,
+	): Any {
+		val project = currentCoroutineContext().project
+		val resolved = resolveFile(project, file_path)
 
-        val result = readAction {
-            val document = resolved.document
-            if (!DocumentUtil.isValidLine(line - 1, document)) {
-                mcpFail("Line $line is out of bounds")
-            }
-            val lineStartOffset = document.getLineStartOffset(line - 1)
-            val offset = lineStartOffset + column - 1
-            if (!DocumentUtil.isValidOffset(offset, document)) {
-                mcpFail("Position $line:$column is out of bounds")
-            }
+		val result = readAction {
+			val document = resolved.document
+			if (!DocumentUtil.isValidLine(line - 1, document)) {
+				mcpFail("Line $line is out of bounds")
+			}
+			val lineStartOffset = document.getLineStartOffset(line - 1)
+			val offset = lineStartOffset + column - 1
+			if (!DocumentUtil.isValidOffset(offset, document)) {
+				mcpFail("Position $line:$column is out of bounds")
+			}
 
-            // Use findReferenceAt — the same approach as IntelliJ's built-in CodeInsightToolset
-            val ref = resolved.psiFile.findReferenceAt(offset)
-            val resolvedElement = ref?.resolve()
+			// Use findReferenceAt — the same approach as IntelliJ's built-in CodeInsightToolset
+			val ref = resolved.psiFile.findReferenceAt(offset)
+			val resolvedElement = ref?.resolve()
 
-            if (resolvedElement != null) {
-                val name = (resolvedElement as? PsiNamedElement)?.name
-                    ?: resolvedElement.text?.take(50)
-                    ?: "unknown"
-                val loc = formatLocation(project, resolvedElement)
-                val snippet = getSnippet(resolvedElement, context_lines)
-                val lang = resolvedElement.navigationElement.language.displayName
+			if (resolvedElement != null) {
+				val name = (resolvedElement as? PsiNamedElement)?.name
+					?: resolvedElement.text?.take(50)
+					?: "unknown"
+				val loc = formatLocation(project, resolvedElement)
+				val snippet = getSnippet(resolvedElement, context_lines)
+				val lang = resolvedElement.navigationElement.language.displayName
 
-                buildString {
-                    append(name)
-                    append(" (")
-                    append(lang)
-                    append(")\n")
-                    append(loc)
-                    append("\n")
-                    if (snippet.isNotEmpty()) {
-                        append("\n")
-                        append(snippet)
-                        append("\n")
-                    }
-                }
-            } else {
-                null
-            }
-        }
+				buildString {
+					append(name)
+					append(" (")
+					append(lang)
+					append(")\n")
+					append(loc)
+					append("\n")
+					if (snippet.isNotEmpty()) {
+						append("\n")
+						append(snippet)
+						append("\n")
+					}
+				}
+			} else {
+				null
+			}
+		}
 
-        if (result == null) {
-            mcpFail("No declaration found at $line:$column")
-        }
+		if (result == null) {
+			mcpFail("No declaration found at $line:$column")
+		}
 
-        return result
-    }
+		return result
+	}
 
-    private fun getSnippet(element: PsiElement, context_lines: Int): String {
-        val navElement = element.navigationElement
-        val file = navElement.containingFile?.virtualFile ?: return ""
-        val document = FileDocumentManager.getInstance().getDocument(file) ?: return ""
-        val textRange = navElement.textRange ?: return ""
-        // Start from element start (to capture doc comments), end after name + context
-        val start_line = document.getLineNumber(textRange.startOffset)
-        val nameLine = document.getLineNumber(navElement.textOffset)
-        val end_line = minOf(document.lineCount - 1, nameLine + context_lines)
-        val startOffset = document.getLineStartOffset(start_line)
-        val endOffset = document.getLineEndOffset(end_line)
-        return document.getText(TextRange(startOffset, endOffset))
-    }
+	private fun getSnippet(element: PsiElement, context_lines: Int): String {
+		val navElement = element.navigationElement
+		val file = navElement.containingFile?.virtualFile ?: return ""
+		val document = FileDocumentManager.getInstance().getDocument(file) ?: return ""
+		val textRange = navElement.textRange ?: return ""
+		// Start from element start (to capture doc comments), end after name + context
+		val start_line = document.getLineNumber(textRange.startOffset)
+		val nameLine = document.getLineNumber(navElement.textOffset)
+		val end_line = minOf(document.lineCount - 1, nameLine + context_lines)
+		val startOffset = document.getLineStartOffset(start_line)
+		val endOffset = document.getLineEndOffset(end_line)
+		return document.getText(TextRange(startOffset, endOffset))
+	}
 }

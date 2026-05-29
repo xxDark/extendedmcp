@@ -32,131 +32,131 @@ import org.jetbrains.kotlin.psi.KtProperty
 class RenameMemberToolset : McpToolset {
 
 
-    @McpTool
-    @McpDescription(
-        """
+	@McpTool
+	@McpDescription(
+		"""
         |Renames a field or method and updates all usages across the project.
         |Fails if renaming would cause a naming conflict (duplicate field name or method signature clash).
         |
         |This is equivalent to IntelliJ's Refactor > Rename (Shift+F6).
     """
-    )
-    suspend fun rename_member(
-        @McpDescription("Path relative to the project root") file_path: String,
-        @McpDescription("Name of the member to rename") symbol_name: String = "",
-        @McpDescription("1-based line number (alternative to symbol_name)") line: Int = 0,
-        @McpDescription("1-based column number (used with line)") column: Int = 0,
-        @McpDescription("New name for the member") new_name: String,
-        @McpDescription("Search in comments and strings (default true)") search_in_comments: Boolean = true,
-        @McpDescription("Search in non-Java/Kotlin files (default false)") search_in_non_java_files: Boolean = false,
-    ): Any {
-        val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, file_path)
-        val element = resolveTargetElement(resolved, symbol_name, line, column)
+	)
+	suspend fun rename_member(
+		@McpDescription("Path relative to the project root") file_path: String,
+		@McpDescription("Name of the member to rename") symbol_name: String = "",
+		@McpDescription("1-based line number (alternative to symbol_name)") line: Int = 0,
+		@McpDescription("1-based column number (used with line)") column: Int = 0,
+		@McpDescription("New name for the member") new_name: String,
+		@McpDescription("Search in comments and strings (default true)") search_in_comments: Boolean = true,
+		@McpDescription("Search in non-Java/Kotlin files (default false)") search_in_non_java_files: Boolean = false,
+	): Any {
+		val project = currentCoroutineContext().project
+		val resolved = resolveFile(project, file_path)
+		val element = resolveTargetElement(resolved, symbol_name, line, column)
 
-        val oldName = readAction {
-            when (element) {
-                is PsiField, is PsiMethod,
-                is KtNamedFunction, is KtProperty -> {
-                }
+		val oldName = readAction {
+			when (element) {
+				is PsiField, is PsiMethod,
+				is KtNamedFunction, is KtProperty -> {
+				}
 
-                else -> mcpFail(
-                    "Element '${(element as? PsiNamedElement)?.name ?: "unknown"}' is not a field or method. " +
-                            "Only fields and methods can be renamed with this tool."
-                )
-            }
-            (element as PsiNamedElement).name ?: mcpFail("Element has no name")
-        }
+				else -> mcpFail(
+					"Element '${(element as? PsiNamedElement)?.name ?: "unknown"}' is not a field or method. " +
+							"Only fields and methods can be renamed with this tool."
+				)
+			}
+			(element as PsiNamedElement).name ?: mcpFail("Element has no name")
+		}
 
-        if (oldName == new_name) {
-            mcpFail("New name '$new_name' is the same as the current name")
-        }
+		if (oldName == new_name) {
+			mcpFail("New name '$new_name' is the same as the current name")
+		}
 
-        // Validate the new name is a legal identifier for the element's language
-        readAction {
-            if (!RenameUtil.isValidName(project, element, new_name)) {
-                mcpFail("'$new_name' is not a valid identifier")
-            }
-        }
+		// Validate the new name is a legal identifier for the element's language
+		readAction {
+			if (!RenameUtil.isValidName(project, element, new_name)) {
+				mcpFail("'$new_name' is not a valid identifier")
+			}
+		}
 
-        // Pre-check for conflicts in the containing class
-        readAction {
-            val containingClass = when (element) {
-                is PsiMember -> element.containingClass
-                is KtNamedFunction, is KtProperty -> {
-                    val ktClass = PsiTreeUtil.getParentOfType(element, KtClassOrObject::class.java)
-                    ktClass?.toLightClass()
-                }
+		// Pre-check for conflicts in the containing class
+		readAction {
+			val containingClass = when (element) {
+				is PsiMember -> element.containingClass
+				is KtNamedFunction, is KtProperty -> {
+					val ktClass = PsiTreeUtil.getParentOfType(element, KtClassOrObject::class.java)
+					ktClass?.toLightClass()
+				}
 
-                else -> null
-            }
+				else -> null
+			}
 
-            if (containingClass != null) {
-                val isField = element is PsiField || element is KtProperty
-                val isMethod = element is PsiMethod || element is KtNamedFunction
+			if (containingClass != null) {
+				val isField = element is PsiField || element is KtProperty
+				val isMethod = element is PsiMethod || element is KtNamedFunction
 
-                if (isField) {
-                    val existing = containingClass.findFieldByName(new_name, false)
-                    if (existing != null) {
-                        mcpFail("Field '$new_name' already exists in class '${containingClass.name}'")
-                    }
-                }
+				if (isField) {
+					val existing = containingClass.findFieldByName(new_name, false)
+					if (existing != null) {
+						mcpFail("Field '$new_name' already exists in class '${containingClass.name}'")
+					}
+				}
 
-                if (isMethod) {
-                    // Get parameter types of the method being renamed
-                    val paramTypes: List<String> = when (element) {
-                        is PsiMethod -> element.parameterList.parameters.map { it.type.presentableText }
-                        is KtNamedFunction -> {
-                            // Find the corresponding light method to get resolved parameter types
-                            containingClass.methods
-                                .firstOrNull { it.navigationElement === element }
-                                ?.parameterList?.parameters?.map { it.type.presentableText }
-                                ?: emptyList()
-                        }
+				if (isMethod) {
+					// Get parameter types of the method being renamed
+					val paramTypes: List<String> = when (element) {
+						is PsiMethod -> element.parameterList.parameters.map { it.type.presentableText }
+						is KtNamedFunction -> {
+							// Find the corresponding light method to get resolved parameter types
+							containingClass.methods
+								.firstOrNull { it.navigationElement === element }
+								?.parameterList?.parameters?.map { it.type.presentableText }
+								?: emptyList()
+						}
 
-                        else -> emptyList()
-                    }
+						else -> emptyList()
+					}
 
-                    for (sibling in containingClass.methods) {
-                        // Skip the method being renamed (and its light class projections)
-                        if (sibling === element) continue
-                        if (sibling.navigationElement === element) continue
-                        if (element is PsiMethod && sibling.navigationElement === element.navigationElement) continue
+					for (sibling in containingClass.methods) {
+						// Skip the method being renamed (and its light class projections)
+						if (sibling === element) continue
+						if (sibling.navigationElement === element) continue
+						if (element is PsiMethod && sibling.navigationElement === element.navigationElement) continue
 
-                        if (sibling.name != new_name) continue
-                        val siblingTypes = sibling.parameterList.parameters.map { it.type.presentableText }
-                        if (siblingTypes == paramTypes) {
-                            val params = paramTypes.joinToString(", ")
-                            mcpFail("Method '$new_name($params)' already exists in class '${containingClass.name}'")
-                        }
-                    }
-                }
-            }
-        }
+						if (sibling.name != new_name) continue
+						val siblingTypes = sibling.parameterList.parameters.map { it.type.presentableText }
+						if (siblingTypes == paramTypes) {
+							val params = paramTypes.joinToString(", ")
+							mcpFail("Method '$new_name($params)' already exists in class '${containingClass.name}'")
+						}
+					}
+				}
+			}
+		}
 
-        // Count usages before renaming (for reporting)
-        val usageCount = readAction {
-            ReferencesSearch.search(element, GlobalSearchScope.projectScope(project))
-                .findAll()
-                .size
-        }
+		// Count usages before renaming (for reporting)
+		val usageCount = readAction {
+			ReferencesSearch.search(element, GlobalSearchScope.projectScope(project))
+				.findAll()
+				.size
+		}
 
-        // Run rename refactoring — BaseRefactoringProcessor.run() manages its own write actions
-        withContext(Dispatchers.EDT) {
-            val processor = RenameProcessor(
-                project,
-                element,
-                new_name,
-                search_in_comments,
-                search_in_non_java_files,
-            )
-            processor.run()
-        }
+		// Run rename refactoring — BaseRefactoringProcessor.run() manages its own write actions
+		withContext(Dispatchers.EDT) {
+			val processor = RenameProcessor(
+				project,
+				element,
+				new_name,
+				search_in_comments,
+				search_in_non_java_files,
+			)
+			processor.run()
+		}
 
-        withContext(Dispatchers.EDT) {
-            FileDocumentManager.getInstance().saveAllDocuments()
-        }
+		withContext(Dispatchers.EDT) {
+			FileDocumentManager.getInstance().saveAllDocuments()
+		}
 
-        return "Renamed '$oldName' to '$new_name'. $usageCount usage(s) updated."
-    }
+		return "Renamed '$oldName' to '$new_name'. $usageCount usage(s) updated."
+	}
 }

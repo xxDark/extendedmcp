@@ -9,117 +9,117 @@ import com.intellij.openapi.diagnostic.logger
 
 class FilteredToolsProvider : McpToolsProvider {
 
-    private var initialized = false
-    private val cachedProviderTools = mutableListOf<McpTool>()
+	private var initialized = false
+	private val cachedProviderTools = mutableListOf<McpTool>()
 
-    override fun getTools(): List<McpTool> {
-        if (!initialized) {
-            initialize()
-            // Return empty on the first call: other providers (including ReflectionToolsProvider)
-            // already return tools in the same getMcpTools() iteration. A deferred triggerRefresh()
-            // scheduled by initialize() will re-evaluate with only this provider remaining.
-            return emptyList()
-        }
+	override fun getTools(): List<McpTool> {
+		if (!initialized) {
+			initialize()
+			// Return empty on the first call: other providers (including ReflectionToolsProvider)
+			// already return tools in the same getMcpTools() iteration. A deferred triggerRefresh()
+			// scheduled by initialize() will re-evaluate with only this provider remaining.
+			return emptyList()
+		}
 
-        val toolsetTools = McpToolset.EP.extensionList.flatMap { toolset ->
-            try {
-                toolset.asTools()
-            } catch (e: Exception) {
-                LOG.warn("Cannot load tools for $toolset", e)
-                emptyList()
-            }
-        }
+		val toolsetTools = McpToolset.EP.extensionList.flatMap { toolset ->
+			try {
+				toolset.asTools()
+			} catch (e: Exception) {
+				LOG.warn("Cannot load tools for $toolset", e)
+				emptyList()
+			}
+		}
 
-        val allTools = cachedProviderTools + toolsetTools
-        val disabled = ToolFilterState.getInstance().getDisabledSet()
-        return allTools.filter { it.descriptor.name !in disabled }
-    }
+		val allTools = cachedProviderTools + toolsetTools
+		val disabled = ToolFilterState.getInstance().getDisabledSet()
+		return allTools.filter { it.descriptor.name !in disabled }
+	}
 
-    fun getBuiltInToolNames(): Set<String> {
-        val ourClassLoader = this::class.java.classLoader
-        val builtIn = mutableSetOf<String>()
-        for (tool in cachedProviderTools) {
-            builtIn.add(tool.descriptor.name)
-        }
-        for (toolset in McpToolset.EP.extensionList) {
-            if (toolset::class.java.classLoader != ourClassLoader) {
-                try {
-                    for (tool in toolset.asTools()) {
-                        builtIn.add(tool.descriptor.name)
-                    }
-                } catch (_: Exception) {
-                }
-            }
-        }
-        return builtIn
-    }
+	fun getBuiltInToolNames(): Set<String> {
+		val ourClassLoader = this::class.java.classLoader
+		val builtIn = mutableSetOf<String>()
+		for (tool in cachedProviderTools) {
+			builtIn.add(tool.descriptor.name)
+		}
+		for (toolset in McpToolset.EP.extensionList) {
+			if (toolset::class.java.classLoader != ourClassLoader) {
+				try {
+					for (tool in toolset.asTools()) {
+						builtIn.add(tool.descriptor.name)
+					}
+				} catch (_: Exception) {
+				}
+			}
+		}
+		return builtIn
+	}
 
-    fun getAllToolsUnfiltered(): List<McpTool> {
-        if (!initialized) {
-            initialize()
-        }
+	fun getAllToolsUnfiltered(): List<McpTool> {
+		if (!initialized) {
+			initialize()
+		}
 
-        val toolsetTools = McpToolset.EP.extensionList.flatMap { toolset ->
-            try {
-                toolset.asTools()
-            } catch (e: Exception) {
-                LOG.warn("Cannot load tools for $toolset", e)
-                emptyList()
-            }
-        }
+		val toolsetTools = McpToolset.EP.extensionList.flatMap { toolset ->
+			try {
+				toolset.asTools()
+			} catch (e: Exception) {
+				LOG.warn("Cannot load tools for $toolset", e)
+				emptyList()
+			}
+		}
 
-        return cachedProviderTools + toolsetTools
-    }
+		return cachedProviderTools + toolsetTools
+	}
 
-    private fun initialize() {
-        val ep = McpToolsProvider.EP.point
-        val myClassName = this::class.java.name
+	private fun initialize() {
+		val ep = McpToolsProvider.EP.point
+		val myClassName = this::class.java.name
 
-        // Collect tools from non-toolset, non-self providers before we remove them
-        for (provider in McpToolsProvider.EP.extensionList) {
-            if (provider === this) continue
-            // Skip ReflectionToolsProvider — we handle McpToolset conversion ourselves
-            if (provider::class.java.name == REFLECTION_TOOLS_PROVIDER_CLASS) continue
-            try {
-                cachedProviderTools.addAll(provider.getTools())
-            } catch (e: Exception) {
-                LOG.warn("Cannot load tools from provider ${provider::class.java.name}", e)
-            }
-        }
+		// Collect tools from non-toolset, non-self providers before we remove them
+		for (provider in McpToolsProvider.EP.extensionList) {
+			if (provider === this) continue
+			// Skip ReflectionToolsProvider — we handle McpToolset conversion ourselves
+			if (provider::class.java.name == REFLECTION_TOOLS_PROVIDER_CLASS) continue
+			try {
+				cachedProviderTools.addAll(provider.getTools())
+			} catch (e: Exception) {
+				LOG.warn("Cannot load tools from provider ${provider::class.java.name}", e)
+			}
+		}
 
-        initialized = true
+		initialized = true
 
-        // Unregister all other providers — keep only ourselves
-        ep.unregisterExtensions({ class_name, _ ->
-            class_name == myClassName
-        }, false)
+		// Unregister all other providers — keep only ourselves
+		ep.unregisterExtensions({ class_name, _ ->
+			class_name == myClassName
+		}, false)
 
-        LOG.info("FilteredToolsProvider initialized: ${cachedProviderTools.size} cached provider tools")
+		LOG.info("FilteredToolsProvider initialized: ${cachedProviderTools.size} cached provider tools")
 
-        // The MCP server's ExtensionPointListener is registered AFTER the initial
-        // getMcpTools() call that triggers our initialization. Schedule a deferred
-        // refresh so the server re-evaluates tools with only this provider remaining.
-        ApplicationManager.getApplication().invokeLater {
-            triggerRefresh()
-        }
-    }
+		// The MCP server's ExtensionPointListener is registered AFTER the initial
+		// getMcpTools() call that triggers our initialization. Schedule a deferred
+		// refresh so the server re-evaluates tools with only this provider remaining.
+		ApplicationManager.getApplication().invokeLater {
+			triggerRefresh()
+		}
+	}
 
-    companion object {
-        private val LOG = logger<FilteredToolsProvider>()
-        private const val REFLECTION_TOOLS_PROVIDER_CLASS = "com.intellij.mcpserver.impl.ReflectionToolsProvider"
+	companion object {
+		private val LOG = logger<FilteredToolsProvider>()
+		private const val REFLECTION_TOOLS_PROVIDER_CLASS = "com.intellij.mcpserver.impl.ReflectionToolsProvider"
 
-        fun getInstance(): FilteredToolsProvider? =
-            McpToolsProvider.EP.findExtension(FilteredToolsProvider::class.java)
+		fun getInstance(): FilteredToolsProvider? =
+			McpToolsProvider.EP.findExtension(FilteredToolsProvider::class.java)
 
-        fun triggerRefresh() {
-            val ep = McpToolsProvider.EP.point
-            val dummy = object : McpToolsProvider {
-                override fun getTools(): List<McpTool> = emptyList()
-            }
-            @Suppress("DEPRECATION")
-            ep.registerExtension(dummy)
-            @Suppress("DEPRECATION")
-            ep.unregisterExtension(dummy)
-        }
-    }
+		fun triggerRefresh() {
+			val ep = McpToolsProvider.EP.point
+			val dummy = object : McpToolsProvider {
+				override fun getTools(): List<McpTool> = emptyList()
+			}
+			@Suppress("DEPRECATION")
+			ep.registerExtension(dummy)
+			@Suppress("DEPRECATION")
+			ep.unregisterExtension(dummy)
+		}
+	}
 }

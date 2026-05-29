@@ -23,39 +23,39 @@ import kotlin.io.path.pathString
 // an empty file. Making the parameter required turns this into a loud error.
 class CreateFileToolset : McpToolset {
 
-    @McpTool
-    @McpDescription(
-        """
+	@McpTool
+	@McpDescription(
+		"""
         |Creates a new file at the specified path within the project directory and populates it with text.
         |Creates any necessary parent directories automatically.
     """
-    )
-    suspend fun create_file(
-        @McpDescription("Path where the file should be created relative to the project root")
-        path_in_project: String,
-        @McpDescription("Content to write into the new file")
-        content: String,
-        @McpDescription("Whether to overwrite an existing file. If false, an error is returned if the file exists.")
-        overwrite: Boolean = false,
-    ): Any {
-        val project = currentCoroutineContext().project
-        val path = project.resolveInProject(path_in_project)
-        try {
-            writeAction {
-                val parent = VfsUtil.createDirectories(path.parent.pathString)
-                val existing = parent.findChild(path.name)
-                if (existing != null && !overwrite) {
-                    mcpFail("File already exists: $path_in_project. Specify overwrite=true to overwrite it.")
-                }
-                val createdFile = parent.findOrCreateFile(path.name)
-                val document = FileDocumentManager.getInstance().getDocument(createdFile)
-                    ?: mcpFail("Cannot get document for: $path_in_project")
-                document.setText(content)
-                FileDocumentManager.getInstance().saveDocument(document)
-            }
-        } catch (e: IOException) {
-            mcpFail("Cannot create file $path_in_project: ${e.message}")
-        }
-        return "Created file $path_in_project"
-    }
+	)
+	suspend fun create_file(
+		@McpDescription("Path where the file should be created relative to the project root")
+		path_in_project: String,
+		@McpDescription("Content to write into the new file")
+		content: String,
+		@McpDescription("Whether to overwrite an existing file. If false, an error is returned if the file exists.")
+		overwrite: Boolean = false,
+	): Any {
+		val project = currentCoroutineContext().project
+		val path = project.resolveInProject(path_in_project)
+		try {
+			writeAction {
+				val parent = VfsUtil.createDirectories(path.parent.pathString)
+				val existing = parent.findChild(path.name)
+				if (existing != null && !overwrite) {
+					mcpFail("File already exists: $path_in_project. Specify overwrite=true to overwrite it.")
+				}
+				val createdFile = parent.findOrCreateFile(path.name)
+				val document = FileDocumentManager.getInstance().getDocument(createdFile)
+					?: mcpFail("Cannot get document for: $path_in_project")
+				document.setText(content)
+				FileDocumentManager.getInstance().saveDocument(document)
+			}
+		} catch (e: IOException) {
+			mcpFail("Cannot create file $path_in_project: ${e.message}")
+		}
+		return "Created file $path_in_project"
+	}
 }

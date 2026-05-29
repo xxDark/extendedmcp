@@ -22,9 +22,9 @@ import kotlinx.coroutines.withContext
 
 class ExtractMethodToolset : McpToolset {
 
-    @McpTool
-    @McpDescription(
-        """
+	@McpTool
+	@McpDescription(
+		"""
         |Extracts the selected code range into a new method (Java).
         |
         |IntelliJ automatically determines parameters, return type, and exceptions.
@@ -33,63 +33,63 @@ class ExtractMethodToolset : McpToolset {
         |Specify the range of code to extract using start/end line numbers (1-based).
         |The entire lines in the range will be extracted.
     """
-    )
-    suspend fun extract_method(
-        @McpDescription("Path relative to the project root") file_path: String,
-        @McpDescription("1-based start line of the code to extract") start_line: Int,
-        @McpDescription("1-based end line of the code to extract (inclusive)") end_line: Int,
-        @McpDescription("Name for the new method") method_name: String,
-    ): Any {
-        val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, file_path)
+	)
+	suspend fun extract_method(
+		@McpDescription("Path relative to the project root") file_path: String,
+		@McpDescription("1-based start line of the code to extract") start_line: Int,
+		@McpDescription("1-based end line of the code to extract (inclusive)") end_line: Int,
+		@McpDescription("Name for the new method") method_name: String,
+	): Any {
+		val project = currentCoroutineContext().project
+		val resolved = resolveFile(project, file_path)
 
-        val (startOffset, endOffset) = readAction {
-            if (!DocumentUtil.isValidLine(start_line - 1, resolved.document)) {
-                mcpFail("Start line $start_line is out of bounds")
-            }
-            if (!DocumentUtil.isValidLine(end_line - 1, resolved.document)) {
-                mcpFail("End line $end_line is out of bounds")
-            }
-            val start = resolved.document.getLineStartOffset(start_line - 1)
-            val end = resolved.document.getLineEndOffset(end_line - 1)
-            start to end
-        }
+		val (startOffset, endOffset) = readAction {
+			if (!DocumentUtil.isValidLine(start_line - 1, resolved.document)) {
+				mcpFail("Start line $start_line is out of bounds")
+			}
+			if (!DocumentUtil.isValidLine(end_line - 1, resolved.document)) {
+				mcpFail("End line $end_line is out of bounds")
+			}
+			val start = resolved.document.getLineStartOffset(start_line - 1)
+			val end = resolved.document.getLineEndOffset(end_line - 1)
+			start to end
+		}
 
-        withContext(Dispatchers.EDT) {
-            writeIntentReadAction {
-                val editor = EditorFactory.getInstance().createEditor(resolved.document, project)
-                try {
-                    editor.selectionModel.setSelection(startOffset, endOffset)
+		withContext(Dispatchers.EDT) {
+			writeIntentReadAction {
+				val editor = EditorFactory.getInstance().createEditor(resolved.document, project)
+				try {
+					editor.selectionModel.setSelection(startOffset, endOffset)
 
-                    val elements = ExtractMethodHandler.getElements(project, editor, resolved.psiFile)
-                    if (elements.isNullOrEmpty()) {
-                        mcpFail("Cannot extract method from the selected range (lines $start_line-$end_line). Ensure the selection contains complete statements.")
-                    }
+					val elements = ExtractMethodHandler.getElements(project, editor, resolved.psiFile)
+					if (elements.isNullOrEmpty()) {
+						mcpFail("Cannot extract method from the selected range (lines $start_line-$end_line). Ensure the selection contains complete statements.")
+					}
 
-                    val processor = ExtractMethodProcessor(
-                        project, editor, elements,
-                        null, // forcedReturnType
-                        "Extract Method",
-                        method_name,
-                        null, // helpId
-                    )
+					val processor = ExtractMethodProcessor(
+						project, editor, elements,
+						null, // forcedReturnType
+						"Extract Method",
+						method_name,
+						null, // helpId
+					)
 
-                    if (!processor.prepare()) {
-                        mcpFail("Cannot extract method: preparation failed. The selected code may not form a valid extractable block.")
-                    }
+					if (!processor.prepare()) {
+						mcpFail("Cannot extract method: preparation failed. The selected code may not form a valid extractable block.")
+					}
 
-                    processor.testPrepare()
-                    ExtractMethodHandler.extractMethod(project, processor)
-                } finally {
-                    EditorFactory.getInstance().releaseEditor(editor)
-                }
-            }
-        }
+					processor.testPrepare()
+					ExtractMethodHandler.extractMethod(project, processor)
+				} finally {
+					EditorFactory.getInstance().releaseEditor(editor)
+				}
+			}
+		}
 
-        withContext(Dispatchers.EDT) {
-            FileDocumentManager.getInstance().saveDocument(resolved.document)
-        }
+		withContext(Dispatchers.EDT) {
+			FileDocumentManager.getInstance().saveDocument(resolved.document)
+		}
 
-        return "Successfully extracted lines $start_line-$end_line into method '$method_name'"
-    }
+		return "Successfully extracted lines $start_line-$end_line into method '$method_name'"
+	}
 }

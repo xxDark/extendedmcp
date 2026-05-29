@@ -19,9 +19,9 @@ import kotlinx.coroutines.currentCoroutineContext
 
 class TypeInfoToolset : McpToolset {
 
-    @McpTool
-    @McpDescription(
-        """
+	@McpTool
+	@McpDescription(
+		"""
         |Returns the inferred type of the expression at the specified position.
         |
         |This is the same as IntelliJ's "Expression Type" action (Ctrl+Shift+P).
@@ -29,82 +29,82 @@ class TypeInfoToolset : McpToolset {
         |
         |Returns the type as a human-readable string and the expression text.
     """
-    )
-    suspend fun get_type_info(
-        @McpDescription("Path relative to the project root") file_path: String,
-        @McpDescription("1-based line number") line: Int,
-        @McpDescription("1-based column number") column: Int,
-    ): Any {
-        val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, file_path)
+	)
+	suspend fun get_type_info(
+		@McpDescription("Path relative to the project root") file_path: String,
+		@McpDescription("1-based line number") line: Int,
+		@McpDescription("1-based column number") column: Int,
+	): Any {
+		val project = currentCoroutineContext().project
+		val resolved = resolveFile(project, file_path)
 
-        return readAction {
-            val document = FileDocumentManager.getInstance().getDocument(resolved.virtualFile)
-                ?: mcpFail("Cannot read file: $file_path")
-            val psiFile = PsiDocumentManager.getInstance(project).getPsiFile(document)
-                ?: mcpFail("Cannot get PSI for: $file_path")
+		return readAction {
+			val document = FileDocumentManager.getInstance().getDocument(resolved.virtualFile)
+				?: mcpFail("Cannot read file: $file_path")
+			val psiFile = PsiDocumentManager.getInstance(project).getPsiFile(document)
+				?: mcpFail("Cannot get PSI for: $file_path")
 
-            if (!DocumentUtil.isValidLine(line - 1, document)) {
-                mcpFail("Line $line is out of bounds")
-            }
-            val lineStartOffset = document.getLineStartOffset(line - 1)
-            val offset = lineStartOffset + column - 1
-            if (!DocumentUtil.isValidOffset(offset, document)) {
-                mcpFail("Position $line:$column is out of bounds")
-            }
+			if (!DocumentUtil.isValidLine(line - 1, document)) {
+				mcpFail("Line $line is out of bounds")
+			}
+			val lineStartOffset = document.getLineStartOffset(line - 1)
+			val offset = lineStartOffset + column - 1
+			if (!DocumentUtil.isValidOffset(offset, document)) {
+				mcpFail("Position $line:$column is out of bounds")
+			}
 
-            val elementAt = psiFile.findElementAt(offset)
-                ?: mcpFail("No element at $line:$column")
+			val elementAt = psiFile.findElementAt(offset)
+				?: mcpFail("No element at $line:$column")
 
-            val (typeText, exprText) = findExpressionType(elementAt)
+			val (typeText, exprText) = findExpressionType(elementAt)
 
-            val expression = exprText ?: elementAt.text
+			val expression = exprText ?: elementAt.text
 
-            buildString {
-                append("Expression: ")
-                append(expression)
-                append("\n")
-                append("Type: ")
-                append(typeText ?: "unknown")
-            }
-        }
-    }
+			buildString {
+				append("Expression: ")
+				append(expression)
+				append("\n")
+				append("Type: ")
+				append(typeText ?: "unknown")
+			}
+		}
+	}
 
-    private fun findExpressionType(element: PsiElement): Pair<String?, String?> {
-        val language = element.language
-        val providers = LanguageExpressionTypes.INSTANCE.forLanguage(language)
-        if (providers != null) {
-            val rawProvider = providers as ExpressionTypeProvider<PsiElement>
-            try {
-                val expressions = rawProvider.getExpressionsAt(element)
-                for (expr in expressions) {
-                    val hint = rawProvider.getInformationHint(expr)
-                    if (hint.isNotBlank()) {
-                        return hint to expr.text
-                    }
-                }
-            } catch (_: Exception) {
-                // Provider doesn't support this element type
-            }
-        }
-        // Try parent element's language if different
-        val parent = element.parent
-        if (parent != null && parent.language != language) {
-            val parentProvider = LanguageExpressionTypes.INSTANCE.forLanguage(parent.language)
-            if (parentProvider != null) {
-                val rawProvider = parentProvider as ExpressionTypeProvider<PsiElement>
-                try {
-                    val expressions = rawProvider.getExpressionsAt(element)
-                    for (expr in expressions) {
-                        val hint = rawProvider.getInformationHint(expr)
-                        if (hint.isNotBlank()) {
-                            return hint to expr.text
-                        }
-                    }
-                } catch (_: Exception) {
-                }
-            }
-        }
-        return null to null
-    }
+	private fun findExpressionType(element: PsiElement): Pair<String?, String?> {
+		val language = element.language
+		val providers = LanguageExpressionTypes.INSTANCE.forLanguage(language)
+		if (providers != null) {
+			val rawProvider = providers as ExpressionTypeProvider<PsiElement>
+			try {
+				val expressions = rawProvider.getExpressionsAt(element)
+				for (expr in expressions) {
+					val hint = rawProvider.getInformationHint(expr)
+					if (hint.isNotBlank()) {
+						return hint to expr.text
+					}
+				}
+			} catch (_: Exception) {
+				// Provider doesn't support this element type
+			}
+		}
+		// Try parent element's language if different
+		val parent = element.parent
+		if (parent != null && parent.language != language) {
+			val parentProvider = LanguageExpressionTypes.INSTANCE.forLanguage(parent.language)
+			if (parentProvider != null) {
+				val rawProvider = parentProvider as ExpressionTypeProvider<PsiElement>
+				try {
+					val expressions = rawProvider.getExpressionsAt(element)
+					for (expr in expressions) {
+						val hint = rawProvider.getInformationHint(expr)
+						if (hint.isNotBlank()) {
+							return hint to expr.text
+						}
+					}
+				} catch (_: Exception) {
+				}
+			}
+		}
+		return null to null
+	}
 }

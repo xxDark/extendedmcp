@@ -20,17 +20,17 @@ import kotlinx.serialization.Serializable
 
 class BatchReplaceTextToolset : McpToolset {
 
-    @Serializable
-    data class TextReplacement(
-        val file_path: String,
-        val old_text: String,
-        val new_text: String,
-        val replace_all: Boolean = true,
-    )
+	@Serializable
+	data class TextReplacement(
+		val file_path: String,
+		val old_text: String,
+		val new_text: String,
+		val replace_all: Boolean = true,
+	)
 
-    @McpTool
-    @McpDescription(
-        """
+	@McpTool
+	@McpDescription(
+		"""
         |Replaces text in multiple files or multiple text regions in one call.
         |Batch version of replace_text_in_file — saves round-trips when making several changes.
         |
@@ -41,58 +41,58 @@ class BatchReplaceTextToolset : McpToolset {
         |Returns a summary of replacements applied per file.
         |Fails if any replacement's old_text is not found in the target file.
     """
-    )
-    suspend fun batch_replace_text_in_file(
-        @McpDescription("List of text replacements to apply")
-        replacements: List<TextReplacement>,
-    ): Any {
-        if (replacements.isEmpty()) mcpFail("replacements must not be empty")
+	)
+	suspend fun batch_replace_text_in_file(
+		@McpDescription("List of text replacements to apply")
+		replacements: List<TextReplacement>,
+	): Any {
+		if (replacements.isEmpty()) mcpFail("replacements must not be empty")
 
-        val project = currentCoroutineContext().project
-        val byFile = replacements.groupBy { it.file_path }
+		val project = currentCoroutineContext().project
+		val byFile = replacements.groupBy { it.file_path }
 
-        return buildString {
-            for ((filePath, fileReplacements) in byFile) {
-                val resolved = resolveFile(project, filePath)
-                val document = resolved.document
+		return buildString {
+			for ((filePath, fileReplacements) in byFile) {
+				val resolved = resolveFile(project, filePath)
+				val document = resolved.document
 
-                val marked = mutableListOf<Pair<RangeMarker, String>>()
+				val marked = mutableListOf<Pair<RangeMarker, String>>()
 
-                readAction {
-                    val text = document.text
-                    for (r in fileReplacements) {
-                        if (r.old_text.isEmpty()) mcpFail("$filePath: old_text must not be empty")
+				readAction {
+					val text = document.text
+					for (r in fileReplacements) {
+						if (r.old_text.isEmpty()) mcpFail("$filePath: old_text must not be empty")
 
-                        var found = false
-                        var currentStart = 0
-                        while (true) {
-                            val idx = text.indexOf(r.old_text, currentStart)
-                            if (idx < 0) break
-                            found = true
-                            marked.add(document.createRangeMarker(idx, idx + r.old_text.length, true) to r.new_text)
-                            if (!r.replace_all) break
-                            currentStart = idx + r.old_text.length
-                        }
+						var found = false
+						var currentStart = 0
+						while (true) {
+							val idx = text.indexOf(r.old_text, currentStart)
+							if (idx < 0) break
+							found = true
+							marked.add(document.createRangeMarker(idx, idx + r.old_text.length, true) to r.new_text)
+							if (!r.replace_all) break
+							currentStart = idx + r.old_text.length
+						}
 
-                        if (!found) mcpFail("$filePath: no occurrences of \"${r.old_text.take(80)}\"")
-                    }
-                }
+						if (!found) mcpFail("$filePath: no occurrences of \"${r.old_text.take(80)}\"")
+					}
+				}
 
-                marked.sortByDescending { it.first.startOffset }
+				marked.sortByDescending { it.first.startOffset }
 
-                withContext(Dispatchers.EDT) {
-                    WriteCommandAction.runWriteCommandAction(project) {
-                        for ((marker, newText) in marked) {
-                            if (!marker.isValid) continue
-                            document.replaceString(marker.startOffset, marker.endOffset, newText)
-                            marker.dispose()
-                        }
-                    }
-                    FileDocumentManager.getInstance().saveDocument(document)
-                }
+				withContext(Dispatchers.EDT) {
+					WriteCommandAction.runWriteCommandAction(project) {
+						for ((marker, newText) in marked) {
+							if (!marker.isValid) continue
+							document.replaceString(marker.startOffset, marker.endOffset, newText)
+							marker.dispose()
+						}
+					}
+					FileDocumentManager.getInstance().saveDocument(document)
+				}
 
-                append(filePath).append(": ").append(marked.size).appendLine(" replacement(s) applied")
-            }
-        }.trimEnd()
-    }
+				append(filePath).append(": ").append(marked.size).appendLine(" replacement(s) applied")
+			}
+		}.trimEnd()
+	}
 }

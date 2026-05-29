@@ -34,22 +34,22 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 class BatchProblemsToolset : McpToolset {
 
-    data class Problem(
-        val severity: String,
-        val description: String,
-        val line: Int,
-        val column: Int,
-        val lineContent: String,
-    )
+	data class Problem(
+		val severity: String,
+		val description: String,
+		val line: Int,
+		val column: Int,
+		val lineContent: String,
+	)
 
-    data class FileProblems(
-        val file_path: String,
-        val problems: List<Problem>,
-    )
+	data class FileProblems(
+		val file_path: String,
+		val problems: List<Problem>,
+	)
 
-    @McpTool
-    @McpDescription(
-        """
+	@McpTool
+	@McpDescription(
+		"""
         |Analyzes files for errors and warnings using IntelliJ's inspections.
         |Batch version of get_file_problems — saves tokens by checking many files in one call.
         |
@@ -58,154 +58,154 @@ class BatchProblemsToolset : McpToolset {
         |Files with no problems are omitted from the results.
         |Note: Lines and Columns are 1-based.
     """
-    )
-    suspend fun get_file_problems(
-        @McpDescription("List of file paths or glob patterns. Empty = all open editor files.")
-        file_paths: List<String> = emptyList(),
-        @McpDescription("Whether to include only errors or include both errors and warnings")
-        errors_only: Boolean = true,
-        @McpDescription("Total timeout in milliseconds")
-        timeout: Int = 30000,
-    ): Any {
-        val project = currentCoroutineContext().project
+	)
+	suspend fun get_file_problems(
+		@McpDescription("List of file paths or glob patterns. Empty = all open editor files.")
+		file_paths: List<String> = emptyList(),
+		@McpDescription("Whether to include only errors or include both errors and warnings")
+		errors_only: Boolean = true,
+		@McpDescription("Total timeout in milliseconds")
+		timeout: Int = 30000,
+	): Any {
+		val project = currentCoroutineContext().project
 
-        val entries: List<ResolvedFileEntry> = if (file_paths.isNotEmpty()) {
-            resolvePatterns(project, file_paths)
-        } else {
-            resolveOpenFiles(project)
-        }
+		val entries: List<ResolvedFileEntry> = if (file_paths.isNotEmpty()) {
+			resolvePatterns(project, file_paths)
+		} else {
+			resolveOpenFiles(project)
+		}
 
-        if (entries.isEmpty()) {
-            mcpFail("No files to analyze. Specify file_paths or open files in the editor.")
-        }
+		if (entries.isEmpty()) {
+			mcpFail("No files to analyze. Specify file_paths or open files in the editor.")
+		}
 
-        val filesToAnalyze = entries.resolvePsi(project)
+		val filesToAnalyze = entries.resolvePsi(project)
 
-        awaitExternalChangesAndIndexing(project)
+		awaitExternalChangesAndIndexing(project)
 
-        val minSeverity = if (errors_only) HighlightSeverity.ERROR else HighlightSeverity.WEAK_WARNING
-        val results = mutableListOf<FileProblems>()
-        var filesAnalyzed = 0
+		val minSeverity = if (errors_only) HighlightSeverity.ERROR else HighlightSeverity.WEAK_WARNING
+		val results = mutableListOf<FileProblems>()
+		var filesAnalyzed = 0
 
-        val timedOut = withTimeoutOrNull(timeout.toLong()) {
-            for (entry in filesToAnalyze) {
-                val problems = analyzeFile(project, entry, minSeverity)
-                filesAnalyzed++
-                if (problems.isNotEmpty()) {
-                    results.add(FileProblems(file_path = entry.relativePath, problems = problems))
-                }
-            }
-        } == null
+		val timedOut = withTimeoutOrNull(timeout.toLong()) {
+			for (entry in filesToAnalyze) {
+				val problems = analyzeFile(project, entry, minSeverity)
+				filesAnalyzed++
+				if (problems.isNotEmpty()) {
+					results.add(FileProblems(file_path = entry.relativePath, problems = problems))
+				}
+			}
+		} == null
 
-        val totalProblems = results.sumOf { it.problems.size }
+		val totalProblems = results.sumOf { it.problems.size }
 
-        if (totalProblems == 0) {
-            return buildString {
-                append("No problems found (").append(filesAnalyzed).append(" files analyzed)")
-                if (timedOut) append(" (timed out)")
-            }
-        }
+		if (totalProblems == 0) {
+			return buildString {
+				append("No problems found (").append(filesAnalyzed).append(" files analyzed)")
+				if (timedOut) append(" (timed out)")
+			}
+		}
 
-        return buildString {
-            append("Analyzed ").append(filesAnalyzed).append(" files, ").append(totalProblems).append(" problems found")
-            if (timedOut) append(" (timed out)")
-            appendLine(":")
-            appendLine()
-            for (fp in results) {
-                append(fp.file_path).appendLine(":")
-                for (p in fp.problems) {
-                    append("  ").append(p.line).append(':').append(p.column).append(' ').append(p.severity).append(": ")
-                        .appendLine(p.description)
-                    append("    ").appendLine(p.lineContent)
-                }
-                appendLine()
-            }
-        }.trimEnd()
-    }
+		return buildString {
+			append("Analyzed ").append(filesAnalyzed).append(" files, ").append(totalProblems).append(" problems found")
+			if (timedOut) append(" (timed out)")
+			appendLine(":")
+			appendLine()
+			for (fp in results) {
+				append(fp.file_path).appendLine(":")
+				for (p in fp.problems) {
+					append("  ").append(p.line).append(':').append(p.column).append(' ').append(p.severity).append(": ")
+						.appendLine(p.description)
+					append("    ").appendLine(p.lineContent)
+				}
+				appendLine()
+			}
+		}.trimEnd()
+	}
 
-    private suspend fun resolvePatterns(project: Project, file_paths: List<String>): List<ResolvedFileEntry> {
-        val seen = LinkedHashSet<VirtualFile>()
-        val result = mutableListOf<ResolvedFileEntry>()
+	private suspend fun resolvePatterns(project: Project, file_paths: List<String>): List<ResolvedFileEntry> {
+		val seen = LinkedHashSet<VirtualFile>()
+		val result = mutableListOf<ResolvedFileEntry>()
 
-        for (token in file_paths) {
-            val pattern = token.trim()
-            if (pattern.isEmpty()) continue
-            val resolved = resolveFilesByPattern(project, pattern)
-            for (entry in resolved.files) {
-                if (seen.add(entry.virtualFile)) {
-                    result.add(entry)
-                }
-            }
-        }
-        return result
-    }
+		for (token in file_paths) {
+			val pattern = token.trim()
+			if (pattern.isEmpty()) continue
+			val resolved = resolveFilesByPattern(project, pattern)
+			for (entry in resolved.files) {
+				if (seen.add(entry.virtualFile)) {
+					result.add(entry)
+				}
+			}
+		}
+		return result
+	}
 
-    private suspend fun resolveOpenFiles(project: Project): List<ResolvedFileEntry> {
-        return readAction {
-            val projectDir = project.projectDirectory
-            FileEditorManager.getInstance(project).openFiles
-                .filter { it.isValid && !it.isDirectory }
-                .mapNotNull { vf ->
-                    val relativePath = try {
-                        projectDir.relativizeIfPossible(vf)
-                    } catch (_: IllegalArgumentException) {
-                        return@mapNotNull null
-                    }
-                    if (relativePath.startsWith("..") || relativePath.contains(".jar!")) {
-                        return@mapNotNull null
-                    }
-                    ResolvedFileEntry(relativePath, vf)
-                }
-        }
-    }
+	private suspend fun resolveOpenFiles(project: Project): List<ResolvedFileEntry> {
+		return readAction {
+			val projectDir = project.projectDirectory
+			FileEditorManager.getInstance(project).openFiles
+				.filter { it.isValid && !it.isDirectory }
+				.mapNotNull { vf ->
+					val relativePath = try {
+						projectDir.relativizeIfPossible(vf)
+					} catch (_: IllegalArgumentException) {
+						return@mapNotNull null
+					}
+					if (relativePath.startsWith("..") || relativePath.contains(".jar!")) {
+						return@mapNotNull null
+					}
+					ResolvedFileEntry(relativePath, vf)
+				}
+		}
+	}
 
-    private suspend fun analyzeFile(
-        project: Project,
-        entry: PsiFileEntry,
-        minSeverity: HighlightSeverity,
-    ): List<Problem> {
-        val collectedInfos = mutableListOf<HighlightInfo>()
-        val daemonIndicator = DaemonProgressIndicator()
-        val range = readAction { ProperTextRange(0, entry.document.textLength) }
+	private suspend fun analyzeFile(
+		project: Project,
+		entry: PsiFileEntry,
+		minSeverity: HighlightSeverity,
+	): List<Problem> {
+		val collectedInfos = mutableListOf<HighlightInfo>()
+		val daemonIndicator = DaemonProgressIndicator()
+		val range = readAction { ProperTextRange(0, entry.document.textLength) }
 
-        jobToIndicator(currentCoroutineContext().job, daemonIndicator) {
-            HighlightingSessionImpl.runInsideHighlightingSession(
-                entry.psiFile, defaultContext(), null, range, false
-            ) { session ->
-                (session as HighlightingSessionImpl).setMinimumSeverity(minSeverity)
-                val codeAnalyzer = DaemonCodeAnalyzer.getInstance(project) as DaemonCodeAnalyzerImpl
-                val infos = codeAnalyzer.runMainPasses(entry.psiFile, entry.document, daemonIndicator)
-                collectedInfos.addAll(infos)
-            }
-        }
+		jobToIndicator(currentCoroutineContext().job, daemonIndicator) {
+			HighlightingSessionImpl.runInsideHighlightingSession(
+				entry.psiFile, defaultContext(), null, range, false
+			) { session ->
+				(session as HighlightingSessionImpl).setMinimumSeverity(minSeverity)
+				val codeAnalyzer = DaemonCodeAnalyzer.getInstance(project) as DaemonCodeAnalyzerImpl
+				val infos = codeAnalyzer.runMainPasses(entry.psiFile, entry.document, daemonIndicator)
+				collectedInfos.addAll(infos)
+			}
+		}
 
-        return readAction {
-            collectedInfos.mapNotNull { info ->
-                if (info.description != null && info.severity.myVal >= minSeverity.myVal) {
-                    createProblem(entry.document, info)
-                } else {
-                    null
-                }
-            }
-        }
-    }
+		return readAction {
+			collectedInfos.mapNotNull { info ->
+				if (info.description != null && info.severity.myVal >= minSeverity.myVal) {
+					createProblem(entry.document, info)
+				} else {
+					null
+				}
+			}
+		}
+	}
 
-    private fun createProblem(document: com.intellij.openapi.editor.Document, info: HighlightInfo): Problem? {
-        val startOffset = info.startOffset
-        if (startOffset < 0 || startOffset >= document.textLength) return null
+	private fun createProblem(document: com.intellij.openapi.editor.Document, info: HighlightInfo): Problem? {
+		val startOffset = info.startOffset
+		if (startOffset < 0 || startOffset >= document.textLength) return null
 
-        val lineNumber = document.getLineNumber(startOffset)
-        val column = startOffset - document.getLineStartOffset(lineNumber)
-        val lineStart = document.getLineStartOffset(lineNumber)
-        val lineEnd = document.getLineEndOffset(lineNumber)
-        val lineContent = document.getText(TextRange(lineStart, lineEnd)).trim()
+		val lineNumber = document.getLineNumber(startOffset)
+		val column = startOffset - document.getLineStartOffset(lineNumber)
+		val lineStart = document.getLineStartOffset(lineNumber)
+		val lineEnd = document.getLineEndOffset(lineNumber)
+		val lineContent = document.getText(TextRange(lineStart, lineEnd)).trim()
 
-        return Problem(
-            severity = info.severity.name,
-            description = info.description!!,
-            line = lineNumber + 1,
-            column = column + 1,
-            lineContent = lineContent,
-        )
-    }
+		return Problem(
+			severity = info.severity.name,
+			description = info.description!!,
+			line = lineNumber + 1,
+			column = column + 1,
+			lineContent = lineContent,
+		)
+	}
 }
