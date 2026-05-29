@@ -8,6 +8,9 @@ import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.roots.LibraryOrderEntry
+import com.intellij.openapi.roots.OrderRootType
+import com.intellij.openapi.roots.ProjectFileIndex
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
@@ -152,6 +155,18 @@ class FindClassToolset : McpToolset {
                     append("\n  Source:")
                     append("\n    ")
                     append(snippet.replace("\n", "\n    "))
+                }
+            }
+
+            val vf = cls.containingFile?.virtualFile
+            if (vf != null) {
+                val entries = ProjectFileIndex.getInstance(project).getOrderEntriesForFile(vf)
+                    .filterIsInstance<LibraryOrderEntry>()
+                val lib = entries.firstOrNull()?.library
+                if (lib != null && lib.getFiles(OrderRootType.SOURCES).isEmpty()) {
+                    append("\n\n  [sources missing] Use download_sources(class_name=\"")
+                    append(qualifiedName)
+                    append("\") to fetch real sources.")
                 }
             }
         }

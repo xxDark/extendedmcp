@@ -36,15 +36,13 @@ class AddImportToolset : McpToolset {
     @McpDescription(
         """
         |Adds one or more import statements to a Java or Kotlin file.
-        |Pass fully qualified names separated by semicolons (e.g. "java.util.List;java.util.Map").
-        |A single import also works (e.g. "java.util.List").
         |Use is_static=true for Java static imports, is_all_under=true for wildcard imports (.*).
         |Skips imports that already exist.
     """
     )
-    suspend fun add_import(
+    suspend fun add_imports(
         @McpDescription("Path relative to the project root") file_path: String,
-        @McpDescription("Fully qualified names to import, semicolon-separated (e.g. 'java.util.List;java.util.Map')") fq_names: String,
+        @McpDescription("Fully qualified names to import") fq_names: List<String>,
         @McpDescription("For Java: static import (default false)") is_static: Boolean = false,
         @McpDescription("Wildcard import .* (default false)") is_all_under: Boolean = false,
     ): Any {
@@ -52,7 +50,7 @@ class AddImportToolset : McpToolset {
         val resolved = resolveFile(project, file_path)
         val isKotlin = resolved.psiFile is KtFile
 
-        val results = fq_names.split(';').filter { it.isNotBlank() }.map { fqName ->
+        val results = fq_names.filter { it.isNotBlank() }.map { fqName ->
             val trimmed = fqName.trim()
             if (isKotlin) {
                 addKotlinImport(resolved, trimmed, is_all_under)

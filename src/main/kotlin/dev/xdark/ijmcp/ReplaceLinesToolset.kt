@@ -9,15 +9,25 @@ import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import dev.xdark.ijmcp.util.resolveFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
-import kotlin.math.min
+import kotlinx.serialization.Serializable
 import kotlin.math.max
+import kotlin.math.min
 
 class ReplaceLinesToolset : McpToolset {
+
+    @Serializable
+    data class Replacement(
+        val file_path: String,
+        val start_line: Int,
+        val end_line: Int,
+        val new_text: String = "",
+    )
 
     @McpTool
     @McpDescription(
@@ -74,5 +84,78 @@ class ReplaceLinesToolset : McpToolset {
                 append('\n')
             }
         }.trimEnd()
+    }
+
+    @McpTool
+    @McpDescription(
+        """
+        |Replaces multiple line ranges across one or more files in a single call.
+        |Much more efficient than multiple replace_lines calls when making several changes.
+        |
+        |Each replacement has: file_path, start_line, end_line, new_text (all 1-based, inclusive).
+        |Ranges within the same file must not overlap.
+        |Replacements are applied bottom-to-top per file so line numbers stay stable.
+    """
+    )
+    suspend fun batch_replace_lines(
+        @McpDescription("Array of replacements to apply") replacements: List<Replacement>,
+    ): Any {
+        if (replacements.isEmpty()) mcpFail("replacements must not be empty")
+
+        val project = currentCoroutineContext().project
+        val byFile = replacements.groupBy { it.file_path }
+
+        return buildString {
+            for ((filePath, fileReplacements) in byFile) {
+                val resolved = resolveFile(project, filePath)
+                val document = resolved.document
+                val lineCount = document.lineCount
+
+                val sorted = fileReplacements.sortedByDescending { it.start_line }
+
+                for (r in sorted) {
+                    if (r.start_line <= 0) mcpFail("$filePath: start_line must be > 0 (got ${r.start_line})")
+                    if (r.end_line <= 0) mcpFail("$filePath: end_line must be > 0 (got ${r.end_line})")
+                    if (r.start_line > r.end_line) mcpFail("$filePath: start_line (${r.start_line}) must be <= end_line (${r.end_line})")
+                    if (r.start_line > lineCount) mcpFail("$filePath: start_line (${r.start_line}) exceeds file length ($lineCount lines)")
+                    if (r.end_line > lineCount) mcpFail("$filePath: end_line (${r.end_line}) exceeds file length ($lineCount lines)")
+                }
+
+                for (i in 0 until sorted.size - 1) {
+                    val upper = sorted[i]
+                    val lower = sorted[i + 1]
+                    if (lower.end_line >= upper.start_line) {
+                        mcpFail("$filePath: overlapping ranges [${lower.start_line}-${lower.end_line}] and [${upper.start_line}-${upper.end_line}]")
+                    }
+                }
+
+                withContext(Dispatchers.EDT) {
+                    WriteCommandAction.runWriteCommandAction(project) {
+                        for (r in sorted) {
+                            val startOffset = document.getLineStartOffset(r.start_line - 1)
+                            val endOffset = document.getLineEndOffset(r.end_line - 1)
+                            document.replaceString(startOffset, endOffset, r.new_text)
+                        }
+                    }
+                    FileDocumentManager.getInstance().saveDocument(document)
+                }
+
+                append(filePath).append(": ").append(fileReplacements.size).appendLine(" replacement(s) applied")
+                appendContext(document, sorted.last().start_line)
+            }
+        }.trimEnd()
+    }
+
+    private fun StringBuilder.appendContext(document: Document, firstChangeLine: Int) {
+        val lineCount = document.lineCount
+        val contextStart = max(1, firstChangeLine - 1)
+        val contextEnd = min(lineCount, firstChangeLine + 3)
+        val chars = document.immutableCharSequence
+        for (lineNumber in contextStart..contextEnd) {
+            val lineIndex = lineNumber - 1
+            append("  L").append(lineNumber).append(": ")
+            append(chars, document.getLineStartOffset(lineIndex), document.getLineEndOffset(lineIndex))
+            append('\n')
+        }
     }
 }

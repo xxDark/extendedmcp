@@ -20,7 +20,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 
 class ChangeSignatureToolset : McpToolset {
 
@@ -38,19 +37,13 @@ class ChangeSignatureToolset : McpToolset {
         |Changes a method's signature — rename, change return type, add/remove/reorder/rename parameters.
         |Automatically updates all call sites across the project.
         |
-        |The `parameters` field is a JSON array describing the NEW parameter list in desired order.
+        |The `parameters` field is an array describing the NEW parameter list in desired order.
         |Each element: {"name": "paramName", "type": "paramType", "oldIndex": N, "defaultValue": "value"}
         |  - oldIndex: index of this parameter in the ORIGINAL method (0-based). Use -1 for newly added parameters.
         |  - defaultValue: for new parameters (oldIndex=-1), the value to insert at existing call sites.
         |  - To remove a parameter: simply omit it from the array.
         |  - To reorder: list in the new desired order with correct oldIndex values.
         |  - To rename: use the same oldIndex but a different name.
-        |
-        |Examples:
-        |  Add a parameter:    parameters='[{"name":"x","type":"int","oldIndex":0},{"name":"y","type":"int","oldIndex":1},{"name":"z","type":"String","oldIndex":-1,"defaultValue":"\"\""}]'
-        |  Remove 2nd param:   parameters='[{"name":"x","type":"int","oldIndex":0}]'
-        |  Swap params:        parameters='[{"name":"y","type":"int","oldIndex":1},{"name":"x","type":"int","oldIndex":0}]'
-        |  Rename param:       parameters='[{"name":"new_name","type":"int","oldIndex":0}]'
     """
     )
     suspend fun change_method_signature(
@@ -60,19 +53,12 @@ class ChangeSignatureToolset : McpToolset {
         @McpDescription("New method name (empty = keep current)") new_name: String = "",
         @McpDescription("New return type (empty = keep current)") new_return_type: String = "",
         @McpDescription("New visibility: public/protected/private/package (empty = keep current)") new_visibility: String = "",
-        @McpDescription("JSON array of parameter specs (see description)") parameters: String,
+        @McpDescription("Array of parameter specs (see description)") parameters: List<ParamSpec>,
         @McpDescription("Keep old method as a delegating overload (default false)") generate_delegate: Boolean = false,
     ): Any {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, file_path)
 
-        val paramSpecs = try {
-            Json.decodeFromString<List<ParamSpec>>(parameters)
-        } catch (e: Exception) {
-            mcpFail("Invalid parameters JSON: ${e.message}")
-        }
-
-        // Find the target method
         val method = readAction {
             val classOwner = resolved.psiFile as? PsiClassOwner
                 ?: mcpFail("File is not a class file: $file_path")
@@ -112,7 +98,7 @@ class ChangeSignatureToolset : McpToolset {
             val containingClass = method.containingClass
             if (containingClass != null) {
                 val effectiveMethodName = new_name.ifEmpty { method.name }
-                val newParamTypes = paramSpecs.map { it.type }
+                val newParamTypes = parameters.map { it.type }
 
                 for (sibling in containingClass.methods) {
                     if (sibling === method) continue
@@ -136,7 +122,7 @@ class ChangeSignatureToolset : McpToolset {
         // Build ParameterInfoImpl array
         val parameterInfos = readAction {
             val elementFactory = JavaPsiFacade.getElementFactory(project)
-            paramSpecs.map { spec ->
+            parameters.map { spec ->
                 if (spec.oldIndex >= 0) {
                     // Existing parameter (possibly renamed/retyped)
                     val psiType = try {
