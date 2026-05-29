@@ -31,8 +31,8 @@ class ReplaceMethodBodyToolset : McpToolset {
     @Serializable
     data class ReplaceMethodBodyResult(
         val success: Boolean,
-        val className: String,
-        val methodName: String,
+        val class_name: String,
+        val method_name: String,
         val message: String,
     )
 
@@ -53,25 +53,25 @@ class ReplaceMethodBodyToolset : McpToolset {
         |  "= items.filter { it != null }"
         |
         |If there are overloaded methods, the tool returns an error listing each overload
-        |with its index and parameter types. Re-call with memberIndex to pick the correct one.
+        |with its index and parameter types. Re-call with member_index to pick the correct one.
     """
     )
     suspend fun replace_method_body(
-        @McpDescription("Path relative to the project root") filePath: String,
-        @McpDescription("Name of the method/function") methodName: String,
-        @McpDescription("The new method body (including braces, or = for Kotlin expression body)") newBody: String,
-        @McpDescription("Simple name of the target class (optional if file has one class)") className: String = "",
-        @McpDescription("Index of the overloaded method (from the overload list error)") memberIndex: Int = -1,
+        @McpDescription("Path relative to the project root") file_path: String,
+        @McpDescription("Name of the method/function") method_name: String,
+        @McpDescription("The new method body (including braces, or = for Kotlin expression body)") new_body: String,
+        @McpDescription("Simple name of the target class (optional if file has one class)") class_name: String = "",
+        @McpDescription("Index of the overloaded method (from the overload list error)") member_index: Int = -1,
     ): ReplaceMethodBodyResult {
         val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, filePath)
+        val resolved = resolveFile(project, file_path)
 
         val isKotlin = resolved.psiFile is KtFile
 
         val result = if (isKotlin) {
-            replaceKotlinBody(resolved, methodName, newBody, className, memberIndex)
+            replaceKotlinBody(resolved, method_name, new_body, class_name, member_index)
         } else {
-            replaceJavaBody(resolved, methodName, newBody, className, memberIndex)
+            replaceJavaBody(resolved, method_name, new_body, class_name, member_index)
         }
 
         withContext(Dispatchers.EDT) {
@@ -83,10 +83,10 @@ class ReplaceMethodBodyToolset : McpToolset {
 
     private suspend fun replaceJavaBody(
         resolved: dev.xdark.ijmcp.util.ResolvedFile,
-        methodName: String,
-        newBody: String,
-        className: String,
-        memberIndex: Int,
+        method_name: String,
+        new_body: String,
+        class_name: String,
+        member_index: Int,
     ): ReplaceMethodBodyResult {
         val project = resolved.psiFile.project
 
@@ -96,19 +96,19 @@ class ReplaceMethodBodyToolset : McpToolset {
             val classes = classOwner.classes
             if (classes.isEmpty()) mcpFail("No classes found in file")
 
-            val psiClass = if (className.isNotEmpty()) {
-                findJavaClassByName(classes, className)
-                    ?: mcpFail("Class '$className' not found. Available: ${collectJavaClassNames(classes)}")
+            val psiClass = if (class_name.isNotEmpty()) {
+                findJavaClassByName(classes, class_name)
+                    ?: mcpFail("Class '$class_name' not found. Available: ${collectJavaClassNames(classes)}")
             } else if (classes.size > 1) {
                 // Search all classes for the method
-                val found = findMethodInClasses(classes, methodName)
+                val found = findMethodInClasses(classes, method_name)
                 if (found.size == 1) return@readAction found[0]
-                else if (found.size > 1) mcpFail("Method '$methodName' found in multiple classes. Specify className.")
-                else mcpFail("Method '$methodName' not found in any class")
+                else if (found.size > 1) mcpFail("Method '$method_name' found in multiple classes. Specify class_name.")
+                else mcpFail("Method '$method_name' not found in any class")
             } else {
                 classes[0]
             }
-            resolveJavaMethod(psiClass, methodName, memberIndex)
+            resolveJavaMethod(psiClass, method_name, member_index)
         }
 
         val resolvedClassName = readAction { method.containingClass?.name ?: "<anonymous>" }
@@ -116,9 +116,9 @@ class ReplaceMethodBodyToolset : McpToolset {
         withContext(Dispatchers.EDT) {
             WriteCommandAction.runWriteCommandAction(project) {
                 val oldBody = method.body
-                    ?: mcpFail("Method '$methodName' has no body (abstract or native)")
+                    ?: mcpFail("Method '$method_name' has no body (abstract or native)")
                 val factory = PsiElementFactory.getInstance(project)
-                val bodyText = if (newBody.trimStart().startsWith("{")) newBody else "{ $newBody }"
+                val bodyText = if (new_body.trimStart().startsWith("{")) new_body else "{ $new_body }"
                 val newBlock = factory.createCodeBlockFromText(bodyText, method as com.intellij.psi.PsiElement)
                 oldBody.replace(newBlock)
                 JavaCodeStyleManager.getInstance(project).shortenClassReferences(method.body!!)
@@ -127,18 +127,18 @@ class ReplaceMethodBodyToolset : McpToolset {
 
         return ReplaceMethodBodyResult(
             success = true,
-            className = resolvedClassName,
-            methodName = methodName,
-            message = "Replaced body of $resolvedClassName.$methodName"
+            class_name = resolvedClassName,
+            method_name = method_name,
+            message = "Replaced body of $resolvedClassName.$method_name"
         )
     }
 
     private suspend fun replaceKotlinBody(
         resolved: dev.xdark.ijmcp.util.ResolvedFile,
-        methodName: String,
-        newBody: String,
-        className: String,
-        memberIndex: Int,
+        method_name: String,
+        new_body: String,
+        class_name: String,
+        member_index: Int,
     ): ReplaceMethodBodyResult {
         val project = resolved.psiFile.project
 
@@ -146,25 +146,25 @@ class ReplaceMethodBodyToolset : McpToolset {
             val ktFile = resolved.psiFile as? KtFile
                 ?: mcpFail("File is not a Kotlin file")
 
-            if (className.isNotEmpty()) {
-                val ktClass = findKotlinClassByName(ktFile.declarations, className)
-                    ?: mcpFail("Class '$className' not found. Available: ${collectKotlinClassNames(ktFile.declarations)}")
-                val body = ktClass.body ?: mcpFail("Class '$className' has no body")
-                resolveKotlinFunction(body.declarations, methodName, memberIndex, "in class '$className'")
+            if (class_name.isNotEmpty()) {
+                val ktClass = findKotlinClassByName(ktFile.declarations, class_name)
+                    ?: mcpFail("Class '$class_name' not found. Available: ${collectKotlinClassNames(ktFile.declarations)}")
+                val body = ktClass.body ?: mcpFail("Class '$class_name' has no body")
+                resolveKotlinFunction(body.declarations, method_name, member_index, "in class '$class_name'")
             } else {
                 // Try top-level first
-                val topLevel = ktFile.declarations.filterIsInstance<KtNamedFunction>().filter { it.name == methodName }
+                val topLevel = ktFile.declarations.filterIsInstance<KtNamedFunction>().filter { it.name == method_name }
                 if (topLevel.isNotEmpty()) {
-                    resolveKotlinFunction(ktFile.declarations, methodName, memberIndex, "at top level")
+                    resolveKotlinFunction(ktFile.declarations, method_name, member_index, "at top level")
                 } else {
                     // Fall back to single class
                     val classes = ktFile.declarations.filterIsInstance<KtClassOrObject>()
                     if (classes.size == 1) {
                         val ktClass = classes[0]
                         val body = ktClass.body ?: mcpFail("Class '${ktClass.name}' has no body")
-                        resolveKotlinFunction(body.declarations, methodName, memberIndex, "in class '${ktClass.name}'")
+                        resolveKotlinFunction(body.declarations, method_name, member_index, "in class '${ktClass.name}'")
                     } else {
-                        mcpFail("Method '$methodName' not found. Specify className.")
+                        mcpFail("Method '$method_name' not found. Specify class_name.")
                     }
                 }
             }
@@ -177,7 +177,7 @@ class ReplaceMethodBodyToolset : McpToolset {
         withContext(Dispatchers.EDT) {
             WriteCommandAction.runWriteCommandAction(project) {
                 val factory = KtPsiFactory(project, markGenerated = true)
-                val trimmed = newBody.trimStart()
+                val trimmed = new_body.trimStart()
 
                 if (trimmed.startsWith("=")) {
                     // Expression body
@@ -201,7 +201,7 @@ class ReplaceMethodBodyToolset : McpToolset {
                     function.add(newExpr)
                 } else {
                     // Block body
-                    val bodyText = if (trimmed.startsWith("{")) newBody else "{\n$newBody\n}"
+                    val bodyText = if (trimmed.startsWith("{")) new_body else "{\n$new_body\n}"
                     val tempFunc = factory.createFunction("fun _t_() $bodyText")
                     val newBlock = tempFunc.bodyBlockExpression
                         ?: mcpFail("Invalid block body")
@@ -222,56 +222,56 @@ class ReplaceMethodBodyToolset : McpToolset {
 
         return ReplaceMethodBodyResult(
             success = true,
-            className = resolvedClassName,
-            methodName = methodName,
-            message = "Replaced body of $resolvedClassName.$methodName"
+            class_name = resolvedClassName,
+            method_name = method_name,
+            message = "Replaced body of $resolvedClassName.$method_name"
         )
     }
 
-    private fun resolveJavaMethod(psiClass: PsiClass, methodName: String, memberIndex: Int): PsiMethod {
-        val methods = psiClass.findMethodsByName(methodName, false)
-        if (methods.isEmpty()) mcpFail("Method '$methodName' not found in class '${psiClass.name}'")
+    private fun resolveJavaMethod(psiClass: PsiClass, method_name: String, member_index: Int): PsiMethod {
+        val methods = psiClass.findMethodsByName(method_name, false)
+        if (methods.isEmpty()) mcpFail("Method '$method_name' not found in class '${psiClass.name}'")
 
-        if (methods.size > 1 && memberIndex < 0) {
+        if (methods.size > 1 && member_index < 0) {
             val overloads = methods.mapIndexed { i, m ->
                 val params = m.parameterList.parameters.joinToString(", ") { p ->
                     "${p.type.presentableText} ${p.name}"
                 }
-                "  $i: $methodName($params)"
+                "  $i: $method_name($params)"
             }.joinToString("\n")
-            mcpFail("Multiple overloads found for '$methodName'. Specify memberIndex:\n$overloads")
+            mcpFail("Multiple overloads found for '$method_name'. Specify member_index:\n$overloads")
         }
 
-        return methods[if (memberIndex >= 0) memberIndex.coerceIn(methods.indices) else 0]
+        return methods[if (member_index >= 0) member_index.coerceIn(methods.indices) else 0]
     }
 
     private fun resolveKotlinFunction(
         declarations: List<org.jetbrains.kotlin.psi.KtDeclaration>,
-        methodName: String,
-        memberIndex: Int,
+        method_name: String,
+        member_index: Int,
         context: String,
     ): KtNamedFunction {
-        val functions = declarations.filterIsInstance<KtNamedFunction>().filter { it.name == methodName }
-        if (functions.isEmpty()) mcpFail("Function '$methodName' not found $context")
+        val functions = declarations.filterIsInstance<KtNamedFunction>().filter { it.name == method_name }
+        if (functions.isEmpty()) mcpFail("Function '$method_name' not found $context")
 
-        if (functions.size > 1 && memberIndex < 0) {
+        if (functions.size > 1 && member_index < 0) {
             val overloads = functions.mapIndexed { i, f ->
                 val params = f.valueParameters.joinToString(", ") { p ->
                     "${p.name ?: "_"}: ${p.typeReference?.text ?: "Any"}"
                 }
-                "  $i: $methodName($params)"
+                "  $i: $method_name($params)"
             }.joinToString("\n")
-            mcpFail("Multiple overloads found for '$methodName' $context. Specify memberIndex:\n$overloads")
+            mcpFail("Multiple overloads found for '$method_name' $context. Specify member_index:\n$overloads")
         }
 
-        return functions[if (memberIndex >= 0) memberIndex.coerceIn(functions.indices) else 0]
+        return functions[if (member_index >= 0) member_index.coerceIn(functions.indices) else 0]
     }
 
-    private fun findMethodInClasses(classes: Array<PsiClass>, methodName: String): List<PsiMethod> {
+    private fun findMethodInClasses(classes: Array<PsiClass>, method_name: String): List<PsiMethod> {
         val found = mutableListOf<PsiMethod>()
         for (cls in classes) {
-            found.addAll(cls.findMethodsByName(methodName, false))
-            found.addAll(findMethodInClasses(cls.innerClasses, methodName))
+            found.addAll(cls.findMethodsByName(method_name, false))
+            found.addAll(findMethodInClasses(cls.innerClasses, method_name))
         }
         return found
     }

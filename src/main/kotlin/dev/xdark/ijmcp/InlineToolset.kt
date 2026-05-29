@@ -35,7 +35,7 @@ class InlineToolset : McpToolset {
 
     @Serializable
     data class InlineResult(
-        val symbolName: String,
+        val symbol_name: String,
         val inlinedSites: List<InlinedSite>,
         val message: String,
     )
@@ -48,16 +48,16 @@ class InlineToolset : McpToolset {
         |This is equivalent to IntelliJ's Refactor > Inline Method (Ctrl+Alt+N).
     """)
     suspend fun inline_method(
-        @McpDescription("Path relative to the project root") filePath: String,
-        @McpDescription("Name of the method to inline") methodName: String = "",
-        @McpDescription("1-based line number (alternative to methodName)") line: Int = 0,
+        @McpDescription("Path relative to the project root") file_path: String,
+        @McpDescription("Name of the method to inline") method_name: String = "",
+        @McpDescription("1-based line number (alternative to method_name)") line: Int = 0,
         @McpDescription("1-based column number (used with line)") column: Int = 0,
-        @McpDescription("Delete the original method after inlining (default true)") deleteDeclaration: Boolean = true,
+        @McpDescription("Delete the original method after inlining (default true)") delete_declaration: Boolean = true,
     ): InlineResult {
         val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, filePath)
+        val resolved = resolveFile(project, file_path)
 
-        val element = resolveTargetElement(resolved, methodName, line, column)
+        val element = resolveTargetElement(resolved, method_name, line, column)
 
         val method = readAction {
             when (element) {
@@ -93,9 +93,9 @@ class InlineToolset : McpToolset {
                     null, // reference (null = inline all)
                     editor,
                     false, // isInlineThisOnly
-                    false, // searchInComments
+                    false, // search_in_comments
                     false, // searchForTextOccurrences
-                    deleteDeclaration,
+                    delete_declaration,
                 )
                 processor.run()
             } finally {
@@ -108,10 +108,10 @@ class InlineToolset : McpToolset {
         }
 
         return InlineResult(
-            symbolName = name,
+            symbol_name = name,
             inlinedSites = callSites,
             message = "Inlined '$name' at ${callSites.size} call site(s)." +
-                if (deleteDeclaration) " Declaration removed." else "",
+                if (delete_declaration) " Declaration removed." else "",
         )
     }
 }

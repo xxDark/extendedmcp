@@ -8,6 +8,7 @@ Registers `McpToolset` implementations via the `com.intellij.mcpServer.mcpToolse
 ```
 src/main/kotlin/dev/xdark/ijmcp/
   util/PsiUtil.kt              — Shared helpers: resolveFile, formatLocation, findSymbolByName, etc.
+  util/FilePatternResolver.kt  — Glob/literal file pattern resolution, PSI batch resolution
   FindUsagesToolset.kt         — find_usages
   QuickFixToolset.kt           — apply_quick_fix
   ExtendedRefactoringToolset.kt — optimize_imports
@@ -30,10 +31,12 @@ src/main/kotlin/dev/xdark/ijmcp/
   ReplaceMethodBodyToolset.kt  — replace_method_body
   DocumentationToolset.kt      — add_documentation, get_documentation, missing_documentation
   FindInFilesToolset.kt        — find_in_files
-  BatchProblemsToolset.kt      — get_batch_file_problems
-  BatchFileTextToolset.kt      — batch_get_file_text
+  BatchProblemsToolset.kt      — get_file_problems
+  BatchFileTextToolset.kt      — read_files
   CreateFileToolset.kt         — create_file
   RenameMemberToolset.kt       — rename_member
+  ShortenReferencesToolset.kt  — shorten_references
+  ReformatToolset.kt           — reformat_files
   ToolFilterToolset.kt         — list_tools_filter
   FilteredToolsProvider.kt     — McpToolsProvider that replaces built-in, applies filter
   ToolFilterState.kt           — Persists disabled tool names

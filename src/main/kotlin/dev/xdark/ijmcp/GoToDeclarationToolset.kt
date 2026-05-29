@@ -42,13 +42,13 @@ class GoToDeclarationToolset : McpToolset {
         |Useful for quickly understanding what a symbol is without reading the whole file.
     """)
     suspend fun go_to_declaration(
-        @McpDescription("Path relative to the project root") filePath: String,
+        @McpDescription("Path relative to the project root") file_path: String,
         @McpDescription("1-based line number") line: Int,
         @McpDescription("1-based column number") column: Int,
-        @McpDescription("Number of context lines around the declaration (default 5)") contextLines: Int = 5,
+        @McpDescription("Number of context lines around the declaration (default 5)") context_lines: Int = 5,
     ): GoToDeclarationResult {
         val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, filePath)
+        val resolved = resolveFile(project, file_path)
 
         val targets = readAction {
             val document = resolved.document
@@ -70,7 +70,7 @@ class GoToDeclarationToolset : McpToolset {
                     ?: resolvedElement.text?.take(50)
                     ?: "unknown"
                 val loc = formatLocation(project, resolvedElement)
-                val snippet = getSnippet(resolvedElement, contextLines)
+                val snippet = getSnippet(resolvedElement, context_lines)
                 val lang = resolvedElement.navigationElement.language.displayName
                 listOf(DeclarationTarget(name, loc, lang, snippet))
             } else {
@@ -85,17 +85,17 @@ class GoToDeclarationToolset : McpToolset {
         return GoToDeclarationResult(targets = targets)
     }
 
-    private fun getSnippet(element: PsiElement, contextLines: Int): String {
+    private fun getSnippet(element: PsiElement, context_lines: Int): String {
         val navElement = element.navigationElement
         val file = navElement.containingFile?.virtualFile ?: return ""
         val document = FileDocumentManager.getInstance().getDocument(file) ?: return ""
         val textRange = navElement.textRange ?: return ""
         // Start from element start (to capture doc comments), end after name + context
-        val startLine = document.getLineNumber(textRange.startOffset)
+        val start_line = document.getLineNumber(textRange.startOffset)
         val nameLine = document.getLineNumber(navElement.textOffset)
-        val endLine = minOf(document.lineCount - 1, nameLine + contextLines)
-        val startOffset = document.getLineStartOffset(startLine)
-        val endOffset = document.getLineEndOffset(endLine)
+        val end_line = minOf(document.lineCount - 1, nameLine + context_lines)
+        val startOffset = document.getLineStartOffset(start_line)
+        val endOffset = document.getLineEndOffset(end_line)
         return document.getText(TextRange(startOffset, endOffset))
     }
 }

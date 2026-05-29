@@ -32,7 +32,7 @@ class SafeDeleteToolset : McpToolset {
     @Serializable
     data class SafeDeleteResult(
         val deleted: Boolean,
-        val symbolName: String,
+        val symbol_name: String,
         val usages: List<UsageInfo>,
         val message: String,
     )
@@ -47,18 +47,18 @@ class SafeDeleteToolset : McpToolset {
         |This is equivalent to IntelliJ's Refactor > Safe Delete (Alt+Delete).
     """)
     suspend fun safe_delete(
-        @McpDescription("Path relative to the project root") filePath: String,
-        @McpDescription("Name of the symbol to delete") symbolName: String = "",
-        @McpDescription("1-based line number (alternative to symbolName)") line: Int = 0,
+        @McpDescription("Path relative to the project root") file_path: String,
+        @McpDescription("Name of the symbol to delete") symbol_name: String = "",
+        @McpDescription("1-based line number (alternative to symbol_name)") line: Int = 0,
         @McpDescription("1-based column number (used with line)") column: Int = 0,
         @McpDescription("Delete even if there are usages (default false)") force: Boolean = false,
-        @McpDescription("Search in comments and strings (default true)") searchInComments: Boolean = true,
-        @McpDescription("Search in non-Java/Kotlin files (default true)") searchInNonJavaFiles: Boolean = true,
+        @McpDescription("Search in comments and strings (default true)") search_in_comments: Boolean = true,
+        @McpDescription("Search in non-Java/Kotlin files (default true)") search_in_non_java_files: Boolean = true,
     ): SafeDeleteResult {
         val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, filePath)
+        val resolved = resolveFile(project, file_path)
 
-        val element = resolveTargetElement(resolved, symbolName, line, column)
+        val element = resolveTargetElement(resolved, symbol_name, line, column)
 
         val name = readAction {
             (element as? PsiNamedElement)?.name ?: element.text?.take(30) ?: "unknown"
@@ -79,7 +79,7 @@ class SafeDeleteToolset : McpToolset {
         if (usages.isNotEmpty() && !force) {
             return SafeDeleteResult(
                 deleted = false,
-                symbolName = name,
+                symbol_name = name,
                 usages = usages,
                 message = "Cannot safely delete '$name': ${usages.size} usage(s) found. Fix them first or use force=true.",
             )
@@ -91,15 +91,15 @@ class SafeDeleteToolset : McpToolset {
                 project,
                 null, // prepareSuccessfulCallback
                 arrayOf(element),
-                searchInComments,
-                searchInNonJavaFiles,
+                search_in_comments,
+                search_in_non_java_files,
             )
             processor.run()
         }
 
         return SafeDeleteResult(
             deleted = true,
-            symbolName = name,
+            symbol_name = name,
             usages = usages,
             message = if (usages.isEmpty()) {
                 "Deleted '$name' (no usages found)."

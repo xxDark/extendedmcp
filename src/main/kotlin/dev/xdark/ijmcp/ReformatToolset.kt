@@ -2,7 +2,7 @@
 
 package dev.xdark.ijmcp
 
-import com.intellij.codeInsight.actions.OptimizeImportsProcessor
+import com.intellij.codeInsight.actions.ReformatCodeProcessor
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
@@ -17,10 +17,10 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 
-class ExtendedRefactoringToolset : McpToolset {
+class ReformatToolset : McpToolset {
 
     @Serializable
-    data class OptimizeImportsResult(
+    data class ReformatResult(
         val filesProcessed: Int,
         val message: String,
     )
@@ -28,15 +28,15 @@ class ExtendedRefactoringToolset : McpToolset {
     @McpTool
     @McpDescription(
         """
-        |Optimizes imports in the specified file(s) by removing unused imports and organizing the remaining ones.
-        |This uses IntelliJ's built-in import optimization which respects language-specific rules and project settings.
+        |Reformats code in the specified file(s) using IntelliJ's code style settings.
         |
         |file_path can be a literal path or a glob pattern (e.g. "src/**/*.java").
+        |Glob mode reformats all matching files in the project.
     """
     )
-    suspend fun optimize_imports(
-        @McpDescription("Path relative to the project root, or glob pattern (e.g. 'src/**/*.kt')") file_path: String,
-    ): OptimizeImportsResult {
+    suspend fun reformat_files(
+        @McpDescription("Path relative to project root, or glob pattern (e.g. 'src/**/*.kt')") file_path: String,
+    ): ReformatResult {
         val project = currentCoroutineContext().project
         val psiFiles = resolveFilesByPattern(project, file_path).resolvePsi(project)
 
@@ -45,21 +45,22 @@ class ExtendedRefactoringToolset : McpToolset {
         }
 
         val finished = CompletableDeferred<Unit>()
-        val processor = OptimizeImportsProcessor(
+        val processor = ReformatCodeProcessor(
             project,
-            psiFiles.map { it.psiFile }.toTypedArray()
-        ) { finished.complete(Unit) }
+            psiFiles.map { it.psiFile }.toTypedArray(),
+            { finished.complete(Unit) },
+            false
+        )
 
         withContext(Dispatchers.EDT) {
             processor.run()
         }
         finished.await()
 
-        return OptimizeImportsResult(
+        return ReformatResult(
             filesProcessed = psiFiles.size,
-            message = if (psiFiles.size == 1) "Optimized imports in ${psiFiles[0].relativePath}"
-            else "Optimized imports in ${psiFiles.size} files"
+            message = if (psiFiles.size == 1) "Reformatted ${psiFiles[0].relativePath}"
+            else "Reformatted ${psiFiles.size} files"
         )
     }
-
 }

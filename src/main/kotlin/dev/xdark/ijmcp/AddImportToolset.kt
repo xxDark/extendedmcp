@@ -45,26 +45,26 @@ class AddImportToolset : McpToolset {
         |Adds one or more import statements to a Java or Kotlin file.
         |Pass fully qualified names separated by semicolons (e.g. "java.util.List;java.util.Map").
         |A single import also works (e.g. "java.util.List").
-        |Use isStatic=true for Java static imports, isAllUnder=true for wildcard imports (.*).
+        |Use is_static=true for Java static imports, is_all_under=true for wildcard imports (.*).
         |Skips imports that already exist.
     """
     )
     suspend fun add_import(
-        @McpDescription("Path relative to the project root") filePath: String,
-        @McpDescription("Fully qualified names to import, semicolon-separated (e.g. 'java.util.List;java.util.Map')") fqNames: String,
-        @McpDescription("For Java: static import (default false)") isStatic: Boolean = false,
-        @McpDescription("Wildcard import .* (default false)") isAllUnder: Boolean = false,
+        @McpDescription("Path relative to the project root") file_path: String,
+        @McpDescription("Fully qualified names to import, semicolon-separated (e.g. 'java.util.List;java.util.Map')") fq_names: String,
+        @McpDescription("For Java: static import (default false)") is_static: Boolean = false,
+        @McpDescription("Wildcard import .* (default false)") is_all_under: Boolean = false,
     ): AddImportsResult {
         val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, filePath)
+        val resolved = resolveFile(project, file_path)
         val isKotlin = resolved.psiFile is KtFile
 
-        val results = fqNames.split(';').filter { it.isNotBlank() }.map { fqName ->
+        val results = fq_names.split(';').filter { it.isNotBlank() }.map { fqName ->
             val trimmed = fqName.trim()
             if (isKotlin) {
-                addKotlinImport(resolved, trimmed, isAllUnder)
+                addKotlinImport(resolved, trimmed, is_all_under)
             } else {
-                addJavaImport(resolved, trimmed, isStatic)
+                addJavaImport(resolved, trimmed, is_static)
             }
         }
 
@@ -78,23 +78,23 @@ class AddImportToolset : McpToolset {
     private suspend fun addJavaImport(
         resolved: dev.xdark.ijmcp.util.ResolvedFile,
         fqName: String,
-        isStatic: Boolean,
+        is_static: Boolean,
     ): AddImportResult {
         val project = resolved.psiFile.project
 
         val javaFile = resolved.psiFile as? PsiJavaFile
                 ?: mcpFail("File is not a Java file")
 
-        if (isStatic) {
+        if (is_static) {
             val lastDot = fqName.lastIndexOf('.')
             if (lastDot < 0) mcpFail("Static import requires 'ClassName.memberName' format, got: $fqName")
-            val className = fqName.substring(0, lastDot)
-            val memberName = fqName.substring(lastDot + 1)
+            val class_name = fqName.substring(0, lastDot)
+            val member_name = fqName.substring(lastDot + 1)
 
             // Check if already imported
             val alreadyImported = readAction {
                 javaFile.importList?.importStaticStatements?.any {
-                    it.resolveTargetClass()?.qualifiedName == className && it.referenceName == memberName
+                    it.resolveTargetClass()?.qualifiedName == class_name && it.referenceName == member_name
                 } ?: false
             }
             if (alreadyImported) {
@@ -104,7 +104,7 @@ class AddImportToolset : McpToolset {
             withContext(Dispatchers.EDT) {
                 WriteCommandAction.runWriteCommandAction(project) {
                     val factory = com.intellij.psi.PsiElementFactory.getInstance(project)
-                    val importStatement = factory.createImportStaticStatementFromText(className, memberName)
+                    val importStatement = factory.createImportStaticStatementFromText(class_name, member_name)
                     javaFile.importList?.add(importStatement)
                 }
             }
@@ -149,7 +149,7 @@ class AddImportToolset : McpToolset {
     private suspend fun addKotlinImport(
         resolved: dev.xdark.ijmcp.util.ResolvedFile,
         fqName: String,
-        isAllUnder: Boolean,
+        is_all_under: Boolean,
     ): AddImportResult {
         val project = resolved.psiFile.project
 
@@ -160,7 +160,7 @@ class AddImportToolset : McpToolset {
         val alreadyImported = readAction {
             ktFile.importDirectives.any { directive ->
                 val path = directive.importPath ?: return@any false
-                path.fqName.asString() == fqName && path.isAllUnder == isAllUnder
+                path.fqName.asString() == fqName && path.isAllUnder == is_all_under
             }
         }
         if (alreadyImported) {
@@ -170,7 +170,7 @@ class AddImportToolset : McpToolset {
         withContext(Dispatchers.EDT) {
             WriteCommandAction.runWriteCommandAction(project) {
                 val factory = KtPsiFactory(project, markGenerated = true)
-                val importPath = ImportPath(FqName(fqName), isAllUnder)
+                val importPath = ImportPath(FqName(fqName), is_all_under)
                 val importDirective = factory.createImportDirective(importPath)
 
                 val importList = ktFile.importList
@@ -189,7 +189,7 @@ class AddImportToolset : McpToolset {
             }
         }
 
-        val displayName = if (isAllUnder) "$fqName.*" else fqName
+        val displayName = if (is_all_under) "$fqName.*" else fqName
         return AddImportResult(added = true, import = displayName, message = "Import added")
     }
 }

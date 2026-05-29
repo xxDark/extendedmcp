@@ -45,7 +45,7 @@ class FindInFilesToolset : McpToolset {
 
     @Serializable
     data class FindInFilesResult(
-        val searchText: String,
+        val search_text: String,
         val matches: List<MatchLocation>,
         val count: Int,
         val truncated: Boolean = false,
@@ -57,34 +57,34 @@ class FindInFilesToolset : McpToolset {
         |Searches for text or regex patterns across project files using IntelliJ's Find in Files engine.
         |Supports whole words, search context filtering (comments/strings), module scope, and file masks.
         |
-        |Scope priority: directory > moduleName > scope parameter.
+        |Scope priority: directory > module_name > scope parameter.
         |Search context values: "any" (default), "inComments", "inStrings", "exceptComments", "exceptStrings", "exceptBoth"
     """
     )
     suspend fun find_in_files(
-        @McpDescription("Text or regex pattern to search for") searchText: String,
-        @McpDescription("Treat searchText as a regular expression (default false)") isRegex: Boolean = false,
-        @McpDescription("Case-sensitive search (default false)") caseSensitive: Boolean = false,
-        @McpDescription("Match whole words only (default false)") wholeWords: Boolean = false,
-        @McpDescription("File name filter, e.g. '*.java' or '*.kt,*.java' (default: all files)") fileMask: String = "",
+        @McpDescription("Text or regex pattern to search for") search_text: String,
+        @McpDescription("Treat search_text as a regular expression (default false)") is_regex: Boolean = false,
+        @McpDescription("Case-sensitive search (default false)") case_sensitive: Boolean = false,
+        @McpDescription("Match whole words only (default false)") whole_words: Boolean = false,
+        @McpDescription("File name filter, e.g. '*.java' or '*.kt,*.java' (default: all files)") file_mask: String = "",
         @McpDescription("Directory to search in, relative to project root") directory: String = "",
-        @McpDescription("Module name to search within") moduleName: String = "",
+        @McpDescription("Module name to search within") module_name: String = "",
         @McpDescription("Search scope: 'project' (default) or 'all' (includes libraries)") scope: String = "project",
         @McpDescription("Where to search: 'any', 'inComments', 'inStrings', 'exceptComments', 'exceptStrings', 'exceptBoth'") context: String = "any",
-        @McpDescription("Maximum number of matches to return (default 100)") maxResults: Int = 100,
+        @McpDescription("Maximum number of matches to return (default 100)") max_results: Int = 100,
     ): FindInFilesResult {
         val project = currentCoroutineContext().project
 
-        if (searchText.isEmpty()) {
-            mcpFail("searchText must not be empty")
+        if (search_text.isEmpty()) {
+            mcpFail("search_text must not be empty")
         }
 
         // Validate module if specified
-        if (moduleName.isNotEmpty()) {
+        if (module_name.isNotEmpty()) {
             val exists = readAction {
-                ModuleManager.getInstance(project).findModuleByName(moduleName) != null
+                ModuleManager.getInstance(project).findModuleByName(module_name) != null
             }
-            if (!exists) mcpFail("Module '$moduleName' not found")
+            if (!exists) mcpFail("Module '$module_name' not found")
         }
 
         // Resolve directory if specified
@@ -98,16 +98,16 @@ class FindInFilesToolset : McpToolset {
         } else null
 
         val findModel = FindModel().apply {
-            stringToFind = searchText
-            isRegularExpressions = isRegex
-            isCaseSensitive = caseSensitive
-            isWholeWordsOnly = wholeWords
+            stringToFind = search_text
+            isRegularExpressions = is_regex
+            isCaseSensitive = case_sensitive
+            isWholeWordsOnly = whole_words
             isMultipleFiles = true
             isFindAll = true
             isFindAllEnabled = true
 
-            if (fileMask.isNotEmpty()) {
-                fileFilter = fileMask
+            if (file_mask.isNotEmpty()) {
+                fileFilter = file_mask
             }
 
             // Scope configuration (priority: directory > module > scope param)
@@ -117,8 +117,8 @@ class FindInFilesToolset : McpToolset {
                     isWithSubdirectories = true
                     isProjectScope = false
                 }
-                moduleName.isNotEmpty() -> {
-                    this.moduleName = moduleName
+                module_name.isNotEmpty() -> {
+                    this.moduleName = module_name
                     isProjectScope = false
                 }
                 scope == "all" -> {
@@ -153,7 +153,7 @@ class FindInFilesToolset : McpToolset {
                     if (truncated.get()) return@Processor false
                     val match = extractMatch(project, usageInfo) ?: return@Processor true
                     matches.add(match)
-                    if (matches.size >= maxResults) {
+                    if (matches.size >= max_results) {
                         truncated.set(true)
                         false
                     } else {
@@ -164,7 +164,7 @@ class FindInFilesToolset : McpToolset {
         }
 
         return FindInFilesResult(
-            searchText = searchText,
+            search_text = search_text,
             matches = matches,
             count = matches.size,
             truncated = truncated.get(),

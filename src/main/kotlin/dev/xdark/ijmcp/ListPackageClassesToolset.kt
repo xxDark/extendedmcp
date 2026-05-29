@@ -24,7 +24,7 @@ class ListPackageClassesToolset : McpToolset {
 
     @Serializable
     data class ListPackageResult(
-        val packageName: String,
+        val package_name: String,
         val classes: List<ClassEntry>,
         val subPackages: List<String>,
         val count: Int,
@@ -38,11 +38,11 @@ class ListPackageClassesToolset : McpToolset {
         |Use recursive=true to include classes from all sub-packages.
         |
         |Examples:
-        |  packageName="java.util.concurrent.locks"
-        |  packageName="com.google.common.collect", recursive=true
+        |  package_name="java.util.concurrent.locks"
+        |  package_name="com.google.common.collect", recursive=true
     """)
     suspend fun list_package_classes(
-        @McpDescription("Fully qualified package name (e.g. 'java.util.concurrent')") packageName: String,
+        @McpDescription("Fully qualified package name (e.g. 'java.util.concurrent')") package_name: String,
         @McpDescription("Include classes from sub-packages (default false)") recursive: Boolean = false,
         @McpDescription("Search scope: 'all' (default, includes libraries) or 'project'") scope: String = "all",
     ): ListPackageResult {
@@ -54,8 +54,8 @@ class ListPackageClassesToolset : McpToolset {
         }
 
         return readAction {
-            val psiPackage = JavaPsiFacade.getInstance(project).findPackage(packageName)
-                ?: mcpFail("Package '$packageName' not found")
+            val psiPackage = JavaPsiFacade.getInstance(project).findPackage(package_name)
+                ?: mcpFail("Package '$package_name' not found")
 
             val classes = mutableListOf<ClassEntry>()
             val subPackages = mutableListOf<String>()
@@ -63,7 +63,7 @@ class ListPackageClassesToolset : McpToolset {
             collectClasses(psiPackage, searchScope, recursive, classes, subPackages)
 
             ListPackageResult(
-                packageName = packageName,
+                package_name = package_name,
                 classes = classes,
                 subPackages = subPackages,
                 count = classes.size,

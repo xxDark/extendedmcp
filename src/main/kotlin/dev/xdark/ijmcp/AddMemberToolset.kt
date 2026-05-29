@@ -29,7 +29,7 @@ class AddMemberToolset : McpToolset {
     @Serializable
     data class AddMemberResult(
         val added: Boolean,
-        val className: String,
+        val class_name: String,
         val memberText: String,
         val message: String,
     )
@@ -46,24 +46,24 @@ class AddMemberToolset : McpToolset {
         |For Kotlin, provide the full function declaration, e.g.:
         |  "fun greet(name: String) { println(name) }"
         |
-        |Specify which class to add to using className (simple name of a class in the file).
-        |If the file contains a single class, className can be omitted.
+        |Specify which class to add to using class_name (simple name of a class in the file).
+        |If the file contains a single class, class_name can be omitted.
     """
     )
     suspend fun add_method(
-        @McpDescription("Path relative to the project root") filePath: String,
-        @McpDescription("The full method/function source text") methodText: String,
-        @McpDescription("Simple name of the target class (optional if file has one class)") className: String = "",
+        @McpDescription("Path relative to the project root") file_path: String,
+        @McpDescription("The full method/function source text") method_text: String,
+        @McpDescription("Simple name of the target class (optional if file has one class)") class_name: String = "",
     ): AddMemberResult {
         val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, filePath)
+        val resolved = resolveFile(project, file_path)
 
         val isKotlin = resolved.psiFile is KtFile
 
         if (isKotlin) {
-            return addKotlinMethod(resolved, methodText, className)
+            return addKotlinMethod(resolved, method_text, class_name)
         } else {
-            return addJavaMethod(resolved, methodText, className)
+            return addJavaMethod(resolved, method_text, class_name)
         }
     }
 
@@ -81,30 +81,30 @@ class AddMemberToolset : McpToolset {
         |  "val name: String = \"\""
         |  "private lateinit var service: MyService"
         |
-        |Specify which class to add to using className (simple name of a class in the file).
-        |If the file contains a single class, className can be omitted.
+        |Specify which class to add to using class_name (simple name of a class in the file).
+        |If the file contains a single class, class_name can be omitted.
     """
     )
     suspend fun add_field(
-        @McpDescription("Path relative to the project root") filePath: String,
-        @McpDescription("The full field/property source text") fieldText: String,
-        @McpDescription("Simple name of the target class (optional if file has one class)") className: String = "",
+        @McpDescription("Path relative to the project root") file_path: String,
+        @McpDescription("The full field/property source text") field_text: String,
+        @McpDescription("Simple name of the target class (optional if file has one class)") class_name: String = "",
     ): AddMemberResult {
         val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, filePath)
+        val resolved = resolveFile(project, file_path)
 
         val isKotlin = resolved.psiFile is KtFile
 
         if (isKotlin) {
-            return addKotlinProperty(resolved, fieldText, className)
+            return addKotlinProperty(resolved, field_text, class_name)
         } else {
-            return addJavaField(resolved, fieldText, className)
+            return addJavaField(resolved, field_text, class_name)
         }
     }
 
     private suspend fun findJavaClass(
         resolved: dev.xdark.ijmcp.util.ResolvedFile,
-        className: String,
+        class_name: String,
     ): PsiClass {
         return readAction {
             val classOwner = resolved.psiFile as? PsiClassOwner
@@ -112,12 +112,12 @@ class AddMemberToolset : McpToolset {
             val classes = classOwner.classes
             if (classes.isEmpty()) mcpFail("No classes found in file")
 
-            if (className.isNotEmpty()) {
-                findJavaClassByName(classes, className)
-                    ?: mcpFail("Class '$className' not found in file. Available: ${collectJavaClassNames(classes)}")
+            if (class_name.isNotEmpty()) {
+                findJavaClassByName(classes, class_name)
+                    ?: mcpFail("Class '$class_name' not found in file. Available: ${collectJavaClassNames(classes)}")
             } else {
                 if (classes.size > 1) {
-                    mcpFail("File contains multiple classes: ${classes.mapNotNull { it.name }}. Specify className.")
+                    mcpFail("File contains multiple classes: ${classes.mapNotNull { it.name }}. Specify class_name.")
                 }
                 classes[0]
             }
@@ -144,7 +144,7 @@ class AddMemberToolset : McpToolset {
 
     private suspend fun findKotlinClass(
         resolved: dev.xdark.ijmcp.util.ResolvedFile,
-        className: String,
+        class_name: String,
     ): KtClassOrObject {
         return readAction {
             val ktFile = resolved.psiFile as? KtFile
@@ -152,12 +152,12 @@ class AddMemberToolset : McpToolset {
             val declarations = ktFile.declarations.filterIsInstance<KtClassOrObject>()
             if (declarations.isEmpty()) mcpFail("No classes found in file")
 
-            if (className.isNotEmpty()) {
-                findKotlinClassByName(ktFile.declarations, className)
-                    ?: mcpFail("Class '$className' not found in file. Available: ${collectKotlinClassNames(ktFile.declarations)}")
+            if (class_name.isNotEmpty()) {
+                findKotlinClassByName(ktFile.declarations, class_name)
+                    ?: mcpFail("Class '$class_name' not found in file. Available: ${collectKotlinClassNames(ktFile.declarations)}")
             } else {
                 if (declarations.size > 1) {
-                    mcpFail("File contains multiple classes: ${declarations.mapNotNull { it.name }}. Specify className.")
+                    mcpFail("File contains multiple classes: ${declarations.mapNotNull { it.name }}. Specify class_name.")
                 }
                 declarations[0]
             }
@@ -193,17 +193,17 @@ class AddMemberToolset : McpToolset {
 
     private suspend fun addJavaMethod(
         resolved: dev.xdark.ijmcp.util.ResolvedFile,
-        methodText: String,
-        className: String,
+        method_text: String,
+        class_name: String,
     ): AddMemberResult {
         val project = resolved.psiFile.project
-        val targetClass = findJavaClass(resolved, className)
+        val targetClass = findJavaClass(resolved, class_name)
         val resolvedClassName = readAction { targetClass.name ?: "<anonymous>" }
 
         withContext(Dispatchers.EDT) {
             WriteCommandAction.runWriteCommandAction(project) {
                 val factory = PsiElementFactory.getInstance(project)
-                val method = factory.createMethodFromText(methodText, targetClass)
+                val method = factory.createMethodFromText(method_text, targetClass)
                 val added = targetClass.add(method)
                 JavaCodeStyleManager.getInstance(project).shortenClassReferences(added)
             }
@@ -215,25 +215,25 @@ class AddMemberToolset : McpToolset {
 
         return AddMemberResult(
             added = true,
-            className = resolvedClassName,
-            memberText = methodText.lines().first().trim(),
+            class_name = resolvedClassName,
+            memberText = method_text.lines().first().trim(),
             message = "Method added to $resolvedClassName"
         )
     }
 
     private suspend fun addJavaField(
         resolved: dev.xdark.ijmcp.util.ResolvedFile,
-        fieldText: String,
-        className: String,
+        field_text: String,
+        class_name: String,
     ): AddMemberResult {
         val project = resolved.psiFile.project
-        val targetClass = findJavaClass(resolved, className)
+        val targetClass = findJavaClass(resolved, class_name)
         val resolvedClassName = readAction { targetClass.name ?: "<anonymous>" }
 
         withContext(Dispatchers.EDT) {
             WriteCommandAction.runWriteCommandAction(project) {
                 val factory = PsiElementFactory.getInstance(project)
-                val field = factory.createFieldFromText(fieldText, targetClass)
+                val field = factory.createFieldFromText(field_text, targetClass)
                 val existingFields = targetClass.fields
                 val added = if (existingFields.isNotEmpty()) {
                     targetClass.addAfter(field, existingFields.last())
@@ -255,25 +255,25 @@ class AddMemberToolset : McpToolset {
 
         return AddMemberResult(
             added = true,
-            className = resolvedClassName,
-            memberText = fieldText.trim(),
+            class_name = resolvedClassName,
+            memberText = field_text.trim(),
             message = "Field added to $resolvedClassName"
         )
     }
 
     private suspend fun addKotlinMethod(
         resolved: dev.xdark.ijmcp.util.ResolvedFile,
-        methodText: String,
-        className: String,
+        method_text: String,
+        class_name: String,
     ): AddMemberResult {
         val project = resolved.psiFile.project
-        val targetClass = findKotlinClass(resolved, className)
+        val targetClass = findKotlinClass(resolved, class_name)
         val resolvedClassName = readAction { targetClass.name ?: "<anonymous>" }
 
         withContext(Dispatchers.EDT) {
             WriteCommandAction.runWriteCommandAction(project) {
                 val factory = KtPsiFactory(project, markGenerated = true)
-                val function = factory.createFunction(methodText)
+                val function = factory.createFunction(method_text)
 
                 val body = targetClass.body
                 if (body != null) {
@@ -304,25 +304,25 @@ class AddMemberToolset : McpToolset {
 
         return AddMemberResult(
             added = true,
-            className = resolvedClassName,
-            memberText = methodText.lines().first().trim(),
+            class_name = resolvedClassName,
+            memberText = method_text.lines().first().trim(),
             message = "Function added to $resolvedClassName"
         )
     }
 
     private suspend fun addKotlinProperty(
         resolved: dev.xdark.ijmcp.util.ResolvedFile,
-        fieldText: String,
-        className: String,
+        field_text: String,
+        class_name: String,
     ): AddMemberResult {
         val project = resolved.psiFile.project
-        val targetClass = findKotlinClass(resolved, className)
+        val targetClass = findKotlinClass(resolved, class_name)
         val resolvedClassName = readAction { targetClass.name ?: "<anonymous>" }
 
         withContext(Dispatchers.EDT) {
             WriteCommandAction.runWriteCommandAction(project) {
                 val factory = KtPsiFactory(project, markGenerated = true)
-                val property = factory.createProperty(fieldText)
+                val property = factory.createProperty(field_text)
 
                 val body = targetClass.body
                 if (body != null) {
@@ -359,8 +359,8 @@ class AddMemberToolset : McpToolset {
 
         return AddMemberResult(
             added = true,
-            className = resolvedClassName,
-            memberText = fieldText.trim(),
+            class_name = resolvedClassName,
+            memberText = field_text.trim(),
             message = "Property added to $resolvedClassName"
         )
     }

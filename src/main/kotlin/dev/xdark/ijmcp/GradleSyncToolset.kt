@@ -29,13 +29,13 @@ class GradleSyncToolset : McpToolset {
         |Equivalent to clicking the "Reload All Gradle Projects" button.
     """)
     suspend fun gradle_sync(
-        @McpDescription("If true, forces downloading sources for all dependencies") downloadSources: Boolean = false,
+        @McpDescription("If true, forces downloading sources for all dependencies") download_sources: Boolean = false,
         @McpDescription("Timeout in milliseconds to wait for sync completion (default 300000 = 5 min). 0 = fire and forget.") timeout: Int = 300000,
     ): GradleSyncResult {
         val project = currentCoroutineContext().project
 
         val spec = ImportSpecBuilder(project, GradleConstants.SYSTEM_ID)
-        if (downloadSources) {
+        if (download_sources) {
             spec.withVmOptions("-Didea.gradle.download.sources.force=true")
         }
 

@@ -64,20 +64,20 @@ class ChangeSignatureToolset : McpToolset {
         |  Add a parameter:    parameters='[{"name":"x","type":"int","oldIndex":0},{"name":"y","type":"int","oldIndex":1},{"name":"z","type":"String","oldIndex":-1,"defaultValue":"\"\""}]'
         |  Remove 2nd param:   parameters='[{"name":"x","type":"int","oldIndex":0}]'
         |  Swap params:        parameters='[{"name":"y","type":"int","oldIndex":1},{"name":"x","type":"int","oldIndex":0}]'
-        |  Rename param:       parameters='[{"name":"newName","type":"int","oldIndex":0}]'
+        |  Rename param:       parameters='[{"name":"new_name","type":"int","oldIndex":0}]'
     """)
     suspend fun change_method_signature(
-        @McpDescription("Path relative to the project root") filePath: String,
-        @McpDescription("Name of the method to change") methodName: String,
+        @McpDescription("Path relative to the project root") file_path: String,
+        @McpDescription("Name of the method to change") method_name: String,
         @McpDescription("1-based line number to disambiguate overloads (0 = first match)") line: Int = 0,
-        @McpDescription("New method name (empty = keep current)") newName: String = "",
-        @McpDescription("New return type (empty = keep current)") newReturnType: String = "",
-        @McpDescription("New visibility: public/protected/private/package (empty = keep current)") newVisibility: String = "",
+        @McpDescription("New method name (empty = keep current)") new_name: String = "",
+        @McpDescription("New return type (empty = keep current)") new_return_type: String = "",
+        @McpDescription("New visibility: public/protected/private/package (empty = keep current)") new_visibility: String = "",
         @McpDescription("JSON array of parameter specs (see description)") parameters: String,
-        @McpDescription("Keep old method as a delegating overload (default false)") generateDelegate: Boolean = false,
+        @McpDescription("Keep old method as a delegating overload (default false)") generate_delegate: Boolean = false,
     ): ChangeSignatureResult {
         val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, filePath)
+        val resolved = resolveFile(project, file_path)
 
         val paramSpecs = try {
             Json.decodeFromString<List<ParamSpec>>(parameters)
@@ -88,14 +88,14 @@ class ChangeSignatureToolset : McpToolset {
         // Find the target method
         val method = readAction {
             val classOwner = resolved.psiFile as? PsiClassOwner
-                ?: mcpFail("File is not a class file: $filePath")
+                ?: mcpFail("File is not a class file: $file_path")
 
             val allMethods = classOwner.classes.flatMap { cls ->
-                cls.methods.filter { it.name == methodName }
+                cls.methods.filter { it.name == method_name }
             }
 
             if (allMethods.isEmpty()) {
-                mcpFail("Method '$methodName' not found in $filePath")
+                mcpFail("Method '$method_name' not found in $file_path")
             }
 
             if (line > 0) {
@@ -104,7 +104,7 @@ class ChangeSignatureToolset : McpToolset {
                     val offset = m.navigationElement.textOffset
                     if (offset < 0 || offset >= document.textLength) false
                     else document.getLineNumber(offset) + 1 == line
-                } ?: mcpFail("Method '$methodName' not found at line $line")
+                } ?: mcpFail("Method '$method_name' not found at line $line")
             } else {
                 if (allMethods.size > 1) {
                     val overloads = allMethods.mapIndexed { i, m ->
@@ -112,7 +112,7 @@ class ChangeSignatureToolset : McpToolset {
                             "${it.type.presentableText} ${it.name}"
                         }
                         val l = resolved.document.getLineNumber(m.navigationElement.textOffset) + 1
-                        "  [$i] $methodName($params) at line $l"
+                        "  [$i] $method_name($params) at line $l"
                     }.joinToString("\n")
                     mcpFail("Multiple overloads found. Specify 'line' to disambiguate:\n$overloads")
                 }
@@ -124,7 +124,7 @@ class ChangeSignatureToolset : McpToolset {
         readAction {
             val containingClass = method.containingClass
             if (containingClass != null) {
-                val effectiveMethodName = newName.ifEmpty { method.name }
+                val effectiveMethodName = new_name.ifEmpty { method.name }
                 val newParamTypes = paramSpecs.map { it.type }
 
                 for (sibling in containingClass.methods) {
@@ -178,28 +178,28 @@ class ChangeSignatureToolset : McpToolset {
 
         // Determine new return type (must always be non-null for the processor)
         val returnType = readAction {
-            if (newReturnType.isNotEmpty()) {
+            if (new_return_type.isNotEmpty()) {
                 val elementFactory = JavaPsiFacade.getElementFactory(project)
                 try {
-                    elementFactory.createTypeFromText(newReturnType, method)
+                    elementFactory.createTypeFromText(new_return_type, method)
                 } catch (e: Exception) {
-                    mcpFail("Invalid return type '$newReturnType': ${e.message}")
+                    mcpFail("Invalid return type '$new_return_type': ${e.message}")
                 }
             } else {
                 method.returnType ?: JavaPsiFacade.getElementFactory(project).createTypeFromText("void", method)
             }
         }
 
-        val effectiveVisibility = when (newVisibility) {
+        val effectiveVisibility = when (new_visibility) {
             "public" -> com.intellij.psi.PsiModifier.PUBLIC
             "protected" -> com.intellij.psi.PsiModifier.PROTECTED
             "private" -> com.intellij.psi.PsiModifier.PRIVATE
             "package" -> com.intellij.psi.PsiModifier.PACKAGE_LOCAL
             "" -> null // keep current
-            else -> mcpFail("Invalid visibility '$newVisibility'. Use: public/protected/private/package")
+            else -> mcpFail("Invalid visibility '$new_visibility'. Use: public/protected/private/package")
         }
 
-        val effectiveName = newName.ifEmpty {
+        val effectiveName = new_name.ifEmpty {
             readAction { method.name }
         }
 
@@ -208,7 +208,7 @@ class ChangeSignatureToolset : McpToolset {
             val processor = ChangeSignatureProcessor(
                 project,
                 method,
-                generateDelegate,
+                generate_delegate,
                 effectiveVisibility,
                 effectiveName,
                 returnType,
@@ -220,7 +220,7 @@ class ChangeSignatureToolset : McpToolset {
         return ChangeSignatureResult(
             success = true,
             affectedCallSites = callSitesBefore,
-            message = "Changed signature of '$methodName'. ${callSitesBefore.size} call site(s) updated.",
+            message = "Changed signature of '$method_name'. ${callSitesBefore.size} call site(s) updated.",
         )
     }
 }

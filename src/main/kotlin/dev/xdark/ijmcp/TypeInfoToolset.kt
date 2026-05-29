@@ -36,18 +36,18 @@ class TypeInfoToolset : McpToolset {
         |Returns the type as a human-readable string and the expression text.
     """)
     suspend fun get_type_info(
-        @McpDescription("Path relative to the project root") filePath: String,
+        @McpDescription("Path relative to the project root") file_path: String,
         @McpDescription("1-based line number") line: Int,
         @McpDescription("1-based column number") column: Int,
     ): TypeInfoResult {
         val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, filePath)
+        val resolved = resolveFile(project, file_path)
 
         return readAction {
             val document = FileDocumentManager.getInstance().getDocument(resolved.virtualFile)
-                ?: mcpFail("Cannot read file: $filePath")
+                ?: mcpFail("Cannot read file: $file_path")
             val psiFile = PsiDocumentManager.getInstance(project).getPsiFile(document)
-                ?: mcpFail("Cannot get PSI for: $filePath")
+                ?: mcpFail("Cannot get PSI for: $file_path")
 
             if (!DocumentUtil.isValidLine(line - 1, document)) {
                 mcpFail("Line $line is out of bounds")

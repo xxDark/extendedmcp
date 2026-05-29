@@ -61,11 +61,11 @@ class FindClassToolset : McpToolset {
         |Useful for discovering and understanding APIs in dependencies.
     """)
     suspend fun find_class(
-        @McpDescription("Class name (short or fully qualified)") className: String,
+        @McpDescription("Class name (short or fully qualified)") class_name: String,
         @McpDescription("Search scope: 'all' (default, includes libraries) or 'project'") scope: String = "all",
         @McpDescription("Max results to return (default 5)") limit: Int = 5,
-        @McpDescription("Include source snippet of the class declaration (default true)") includeSource: Boolean = true,
-        @McpDescription("Max lines of source to include (default 50)") maxSourceLines: Int = 50,
+        @McpDescription("Include source snippet of the class declaration (default true)") include_source: Boolean = true,
+        @McpDescription("Max lines of source to include (default 50)") max_source_lines: Int = 50,
     ): FindClassResult {
         val project = currentCoroutineContext().project
         val searchScope = when (scope) {
@@ -74,13 +74,13 @@ class FindClassToolset : McpToolset {
         }
 
         val classes = readAction {
-            val found = if (className.contains('.')) {
-                JavaPsiFacade.getInstance(project).findClasses(className, searchScope).toList()
+            val found = if (class_name.contains('.')) {
+                JavaPsiFacade.getInstance(project).findClasses(class_name, searchScope).toList()
             } else {
                 PsiShortNamesCache.getInstance(project)
-                    .getClassesByName(className, searchScope).toList()
+                    .getClassesByName(class_name, searchScope).toList()
             }
-            found.take(limit).map { cls -> buildClassInfo(cls, includeSource, maxSourceLines) }
+            found.take(limit).map { cls -> buildClassInfo(cls, include_source, max_source_lines) }
         }
 
         return FindClassResult(classes = classes, count = classes.size)
@@ -88,8 +88,8 @@ class FindClassToolset : McpToolset {
 
     private fun buildClassInfo(
         cls: PsiClass,
-        includeSource: Boolean,
-        maxSourceLines: Int,
+        include_source: Boolean,
+        max_source_lines: Int,
     ): ClassInfo {
         val project = cls.project
 
@@ -136,8 +136,8 @@ class FindClassToolset : McpToolset {
         val superClass = cls.superClass?.qualifiedName?.takeIf { it != "java.lang.Object" }
         val interfaces = cls.interfaces.mapNotNull { it.qualifiedName }
 
-        val sourceSnippet = if (includeSource) {
-            getClassSource(cls, maxSourceLines)
+        val sourceSnippet = if (include_source) {
+            getClassSource(cls, max_source_lines)
         } else ""
 
         return ClassInfo(
@@ -157,9 +157,9 @@ class FindClassToolset : McpToolset {
         val file = navElement.containingFile?.virtualFile ?: return ""
         val document = FileDocumentManager.getInstance().getDocument(file) ?: return ""
         val startOffset = navElement.textRange?.startOffset ?: return ""
-        val startLine = document.getLineNumber(startOffset)
-        val endLine = minOf(document.lineCount - 1, startLine + maxLines - 1)
-        val endOffset = document.getLineEndOffset(endLine)
+        val start_line = document.getLineNumber(startOffset)
+        val end_line = minOf(document.lineCount - 1, start_line + maxLines - 1)
+        val endOffset = document.getLineEndOffset(end_line)
         return document.getText(TextRange(startOffset, endOffset))
     }
 }

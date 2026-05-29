@@ -33,27 +33,27 @@ class MoveClassToolset : McpToolset {
         |Creates the target package directory if it doesn't exist.
         |
         |Examples:
-        |  filePath="src/main/kotlin/com/example/Foo.kt", targetPackage="com.example.util"
-        |  filePath="src/main/java/com/example/MyService.java", targetPackage="com.example.service"
+        |  file_path="src/main/kotlin/com/example/Foo.kt", target_package="com.example.util"
+        |  file_path="src/main/java/com/example/MyService.java", target_package="com.example.service"
     """
     )
     suspend fun move_class(
-        @McpDescription("Path relative to the project root") filePath: String,
-        @McpDescription("Fully qualified target package name (e.g. 'com.example.util')") targetPackage: String,
-        @McpDescription("Update references in comments and strings (default true)") searchInComments: Boolean = true,
-        @McpDescription("Update references in non-Java/Kotlin files (default true)") searchInNonJavaFiles: Boolean = true,
+        @McpDescription("Path relative to the project root") file_path: String,
+        @McpDescription("Fully qualified target package name (e.g. 'com.example.util')") target_package: String,
+        @McpDescription("Update references in comments and strings (default true)") search_in_comments: Boolean = true,
+        @McpDescription("Update references in non-Java/Kotlin files (default true)") search_in_non_java_files: Boolean = true,
     ): String {
         val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, filePath)
+        val resolved = resolveFile(project, file_path)
 
         val sourceRoot = readAction {
             val classOwner = resolved.psiFile as? PsiClassOwner
-                ?: mcpFail("File is not a class file: $filePath")
+                ?: mcpFail("File is not a class file: $file_path")
             if (classOwner.classes.isEmpty()) {
-                mcpFail("No classes found in: $filePath")
+                mcpFail("No classes found in: $file_path")
             }
             ProjectFileIndex.getInstance(project).getSourceRootForFile(resolved.virtualFile)
-                ?: mcpFail("Cannot determine source root for: $filePath")
+                ?: mcpFail("Cannot determine source root for: $file_path")
         }
 
         val classNames = readAction {
@@ -61,12 +61,12 @@ class MoveClassToolset : McpToolset {
         }
 
         withContext(Dispatchers.EDT) {
-            val targetPkg = PackageWrapper(PsiManager.getInstance(project), targetPackage)
+            val targetPkg = PackageWrapper(PsiManager.getInstance(project), target_package)
             val destination = AutocreatingSingleSourceRootMoveDestination(targetPkg, sourceRoot)
 
             val verifyError = destination.verify(resolved.psiFile)
             if (verifyError != null) {
-                mcpFail("Cannot move to '$targetPackage': $verifyError")
+                mcpFail("Cannot move to '$target_package': $verifyError")
             }
 
             // Get/create the target directory — write action needed for directory creation
@@ -81,14 +81,14 @@ class MoveClassToolset : McpToolset {
                 project,
                 arrayOf(resolved.psiFile),
                 targetDir,
-                searchInComments,
-                searchInNonJavaFiles,
+                search_in_comments,
+                search_in_non_java_files,
                 null, // moveCallback
                 null, // prepareSuccessfulCallback
             )
             processor.run()
         }
 
-        return "Moved ${classNames.joinToString(", ")} to $targetPackage"
+        return "Moved ${classNames.joinToString(", ")} to $target_package"
     }
 }

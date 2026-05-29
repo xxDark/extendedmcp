@@ -3,10 +3,18 @@ package dev.xdark.ijmcp
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.ui.DialogWrapper
-import com.intellij.ui.CheckBoxList
+import com.intellij.ui.DocumentAdapter
+import com.intellij.ui.SearchTextField
+import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
-import java.awt.Dimension
-import javax.swing.JComponent
+import com.intellij.ui.table.JBTable
+import com.intellij.util.ui.JBUI
+import java.awt.BorderLayout
+import java.awt.FlowLayout
+import javax.swing.*
+import javax.swing.event.DocumentEvent
+import javax.swing.table.AbstractTableModel
+import javax.swing.table.TableRowSorter
 
 class ToolFilterAction : AnAction() {
     override fun actionPerformed(e: AnActionEvent) {
@@ -15,36 +23,155 @@ class ToolFilterAction : AnAction() {
     }
 }
 
+private class ToolEntry(val name: String, val isBuiltIn: Boolean, var enabled: Boolean)
+
+private class ToolTableModel(val tools: List<ToolEntry>) : AbstractTableModel() {
+    override fun getRowCount() = tools.size
+    override fun getColumnCount() = 3
+
+    override fun getColumnName(column: Int) = when (column) {
+        0 -> ""
+        1 -> "Tool"
+        2 -> "Source"
+        else -> ""
+    }
+
+    override fun getColumnClass(column: Int) = when (column) {
+        0 -> java.lang.Boolean::class.java
+        else -> String::class.java
+    }
+
+    override fun isCellEditable(row: Int, column: Int) = column == 0
+
+    override fun getValueAt(row: Int, column: Int): Any = when (column) {
+        0 -> tools[row].enabled
+        1 -> tools[row].name
+        2 -> if (tools[row].isBuiltIn) "built-in" else "ext"
+        else -> ""
+    }
+
+    override fun setValueAt(value: Any?, row: Int, column: Int) {
+        if (column == 0) {
+            tools[row].enabled = value as Boolean
+            fireTableCellUpdated(row, column)
+        }
+    }
+}
+
 private class ToolFilterDialog(private val provider: FilteredToolsProvider) : DialogWrapper(null) {
-    private val checkBoxList = CheckBoxList<String>()
-    private val toolNames: List<String>
+
+    private val tools: List<ToolEntry>
+    private val tableModel: ToolTableModel
+    private val table: JBTable
+    private val sorter: TableRowSorter<ToolTableModel>
+    private val statusLabel = JBLabel()
 
     init {
         title = "MCP Tool Filter"
+
         val disabled = ToolFilterState.getInstance().getDisabledSet()
-        val tools = provider.getAllToolsUnfiltered()
+        val builtInNames = provider.getBuiltInToolNames()
+        val allToolNames = provider.getAllToolsUnfiltered()
             .map { it.descriptor.name }
             .distinct()
             .sorted()
-        toolNames = tools
-        for (name in tools) {
-            checkBoxList.addItem(name, name, name !in disabled)
+
+        tools = allToolNames.map { name ->
+            ToolEntry(name, name in builtInNames, name !in disabled)
         }
+
+        tableModel = ToolTableModel(tools)
+        table = JBTable(tableModel).apply {
+            setShowGrid(false)
+            intercellSpacing = JBUI.emptySize()
+            columnModel.getColumn(0).apply {
+                maxWidth = JBUI.scale(30)
+                minWidth = JBUI.scale(30)
+            }
+            columnModel.getColumn(2).apply {
+                maxWidth = JBUI.scale(60)
+                minWidth = JBUI.scale(60)
+            }
+        }
+        sorter = TableRowSorter(tableModel)
+        table.rowSorter = sorter
+
+        tableModel.addTableModelListener { updateStatus() }
+        updateStatus()
+
         init()
     }
 
     override fun createCenterPanel(): JComponent {
-        val scrollPane = JBScrollPane(checkBoxList)
-        scrollPane.preferredSize = Dimension(400, 500)
-        return scrollPane
+        val panel = JPanel(BorderLayout(0, JBUI.scale(4)))
+
+        val searchField = SearchTextField(false).apply {
+            addDocumentListener(object : DocumentAdapter() {
+                override fun textChanged(e: DocumentEvent) {
+                    val text = text.orEmpty()
+                    sorter.rowFilter = if (text.isEmpty()) null
+                    else RowFilter.regexFilter("(?i)${Regex.escape(text)}", 1)
+                }
+            })
+        }
+        panel.add(searchField, BorderLayout.NORTH)
+
+        val buttonRow1 = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0)).apply {
+            add(createButton("Enable All") { setAll(true) })
+            add(createButton("Disable All") { setAll(false) })
+            add(Box.createHorizontalStrut(JBUI.scale(8)))
+            add(createButton("Built-in On") { setBySource(builtIn = true, enabled = true) })
+            add(createButton("Built-in Off") { setBySource(builtIn = true, enabled = false) })
+            add(Box.createHorizontalStrut(JBUI.scale(8)))
+            add(createButton("Reset") { setAll(true) })
+        }
+
+        val topPanel = JPanel(BorderLayout(0, JBUI.scale(4))).apply {
+            add(searchField, BorderLayout.NORTH)
+            add(buttonRow1, BorderLayout.SOUTH)
+        }
+        panel.add(topPanel, BorderLayout.NORTH)
+
+        val scrollPane = JBScrollPane(table)
+        scrollPane.preferredSize = JBUI.size(500, 400)
+        panel.add(scrollPane, BorderLayout.CENTER)
+
+        panel.add(statusLabel, BorderLayout.SOUTH)
+
+        return panel
+    }
+
+    private fun createButton(text: String, action: () -> Unit): JButton {
+        return JButton(text).apply {
+            addActionListener { action(); updateStatus() }
+            isFocusable = false
+        }
+    }
+
+    private fun setAll(enabled: Boolean) {
+        tools.forEach { it.enabled = enabled }
+        tableModel.fireTableDataChanged()
+    }
+
+    private fun setBySource(builtIn: Boolean, enabled: Boolean) {
+        tools.filter { it.isBuiltIn == builtIn }.forEach { it.enabled = enabled }
+        tableModel.fireTableDataChanged()
+    }
+
+    private fun updateStatus() {
+        val enabled = tools.count { it.enabled }
+        val builtInEnabled = tools.count { it.isBuiltIn && it.enabled }
+        val builtInTotal = tools.count { it.isBuiltIn }
+        val extEnabled = tools.count { !it.isBuiltIn && it.enabled }
+        val extTotal = tools.count { !it.isBuiltIn }
+        statusLabel.text =
+            "$enabled/${tools.size} enabled  |  built-in: $builtInEnabled/$builtInTotal  |  ext: $extEnabled/$extTotal"
     }
 
     override fun doOKAction() {
         val state = ToolFilterState.getInstance()
-        for (i in toolNames.indices) {
-            val name = toolNames[i]
-            val enabled = checkBoxList.isItemSelected(i)
-            state.setDisabled(name, !enabled)
+        for (tool in tools) {
+            state.setDisabled(tool.name, !tool.enabled)
         }
         FilteredToolsProvider.triggerRefresh()
         super.doOKAction()

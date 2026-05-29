@@ -33,23 +33,23 @@ class ExtractMethodToolset : McpToolset {
         |The entire lines in the range will be extracted.
     """)
     suspend fun extract_method(
-        @McpDescription("Path relative to the project root") filePath: String,
-        @McpDescription("1-based start line of the code to extract") startLine: Int,
-        @McpDescription("1-based end line of the code to extract (inclusive)") endLine: Int,
-        @McpDescription("Name for the new method") methodName: String,
+        @McpDescription("Path relative to the project root") file_path: String,
+        @McpDescription("1-based start line of the code to extract") start_line: Int,
+        @McpDescription("1-based end line of the code to extract (inclusive)") end_line: Int,
+        @McpDescription("Name for the new method") method_name: String,
     ): String {
         val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, filePath)
+        val resolved = resolveFile(project, file_path)
 
         val (startOffset, endOffset) = readAction {
-            if (!DocumentUtil.isValidLine(startLine - 1, resolved.document)) {
-                mcpFail("Start line $startLine is out of bounds")
+            if (!DocumentUtil.isValidLine(start_line - 1, resolved.document)) {
+                mcpFail("Start line $start_line is out of bounds")
             }
-            if (!DocumentUtil.isValidLine(endLine - 1, resolved.document)) {
-                mcpFail("End line $endLine is out of bounds")
+            if (!DocumentUtil.isValidLine(end_line - 1, resolved.document)) {
+                mcpFail("End line $end_line is out of bounds")
             }
-            val start = resolved.document.getLineStartOffset(startLine - 1)
-            val end = resolved.document.getLineEndOffset(endLine - 1)
+            val start = resolved.document.getLineStartOffset(start_line - 1)
+            val end = resolved.document.getLineEndOffset(end_line - 1)
             start to end
         }
 
@@ -61,14 +61,14 @@ class ExtractMethodToolset : McpToolset {
 
                     val elements = ExtractMethodHandler.getElements(project, editor, resolved.psiFile)
                     if (elements.isNullOrEmpty()) {
-                        mcpFail("Cannot extract method from the selected range (lines $startLine-$endLine). Ensure the selection contains complete statements.")
+                        mcpFail("Cannot extract method from the selected range (lines $start_line-$end_line). Ensure the selection contains complete statements.")
                     }
 
                     val processor = ExtractMethodProcessor(
                         project, editor, elements,
                         null, // forcedReturnType
                         "Extract Method",
-                        methodName,
+                        method_name,
                         null, // helpId
                     )
 
@@ -88,6 +88,6 @@ class ExtractMethodToolset : McpToolset {
             FileDocumentManager.getInstance().saveDocument(resolved.document)
         }
 
-        return "Successfully extracted lines $startLine-$endLine into method '$methodName'"
+        return "Successfully extracted lines $start_line-$end_line into method '$method_name'"
     }
 }

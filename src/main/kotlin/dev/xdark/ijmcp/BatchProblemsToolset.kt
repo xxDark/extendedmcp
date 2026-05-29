@@ -18,17 +18,16 @@ import com.intellij.mcpserver.util.awaitExternalChangesAndIndexing
 import com.intellij.mcpserver.util.projectDirectory
 import com.intellij.mcpserver.util.relativizeIfPossible
 import com.intellij.openapi.application.readAction
-import com.intellij.openapi.editor.Document
-import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.progress.jobToIndicator
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.ProperTextRange
 import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.psi.PsiFile
-import com.intellij.psi.PsiManager
-import dev.xdark.ijmcp.util.resolveFile
+import dev.xdark.ijmcp.util.PsiFileEntry
+import dev.xdark.ijmcp.util.ResolvedFileEntry
+import dev.xdark.ijmcp.util.resolvePsi
+import dev.xdark.ijmcp.util.resolveFilesByPattern
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
 import kotlinx.coroutines.withTimeoutOrNull
@@ -47,7 +46,7 @@ class BatchProblemsToolset : McpToolset {
 
     @Serializable
     data class FileProblems(
-        val filePath: String,
+        val file_path: String,
         val problems: List<Problem>,
     )
 
@@ -62,37 +61,40 @@ class BatchProblemsToolset : McpToolset {
     @McpTool
     @McpDescription(
         """
-        |Analyzes multiple files for errors and warnings using IntelliJ's inspections.
+        |Analyzes files for errors and warnings using IntelliJ's inspections.
         |Batch version of get_file_problems — saves tokens by checking many files in one call.
         |
-        |Pass specific files via semicolon-separated filePaths, or leave empty to check all open editor files.
+        |file_paths accepts semicolon-separated file paths or glob patterns (e.g. "src/**/*.java").
+        |Leave empty to check all open editor files.
         |Files with no problems are omitted from the results.
         |Note: Lines and Columns are 1-based.
     """
     )
-    suspend fun get_batch_file_problems(
-        @McpDescription("Semicolon-separated file paths relative to project root. Empty = all open editor files.")
-        filePaths: String = "",
+    suspend fun get_file_problems(
+        @McpDescription("Semicolon-separated file paths or glob patterns. Empty = all open editor files.")
+        file_paths: String = "",
         @McpDescription("Whether to include only errors or include both errors and warnings")
-        errorsOnly: Boolean = true,
+        errors_only: Boolean = true,
         @McpDescription("Total timeout in milliseconds")
         timeout: Int = 30000,
     ): BatchFileProblemsResult {
         val project = currentCoroutineContext().project
 
-        val filesToAnalyze: List<FileEntry> = if (filePaths.isNotBlank()) {
-            resolveSpecificFiles(project, filePaths)
+        val entries: List<ResolvedFileEntry> = if (file_paths.isNotBlank()) {
+            resolvePatterns(project, file_paths)
         } else {
             resolveOpenFiles(project)
         }
 
-        if (filesToAnalyze.isEmpty()) {
-            mcpFail("No files to analyze. Specify filePaths or open files in the editor.")
+        if (entries.isEmpty()) {
+            mcpFail("No files to analyze. Specify file_paths or open files in the editor.")
         }
+
+        val filesToAnalyze = entries.resolvePsi(project)
 
         awaitExternalChangesAndIndexing(project)
 
-        val minSeverity = if (errorsOnly) HighlightSeverity.ERROR else HighlightSeverity.WEAK_WARNING
+        val minSeverity = if (errors_only) HighlightSeverity.ERROR else HighlightSeverity.WEAK_WARNING
         val results = mutableListOf<FileProblems>()
         var filesAnalyzed = 0
 
@@ -101,7 +103,7 @@ class BatchProblemsToolset : McpToolset {
                 val problems = analyzeFile(project, entry, minSeverity)
                 filesAnalyzed++
                 if (problems.isNotEmpty()) {
-                    results.add(FileProblems(filePath = entry.relativePath, problems = problems))
+                    results.add(FileProblems(file_path = entry.relativePath, problems = problems))
                 }
             }
         } == null
@@ -116,24 +118,23 @@ class BatchProblemsToolset : McpToolset {
         )
     }
 
-    private data class FileEntry(
-        val relativePath: String,
-        val virtualFile: VirtualFile,
-    )
+    private suspend fun resolvePatterns(project: Project, file_paths: String): List<ResolvedFileEntry> {
+        val tokens = file_paths.split(";").map { it.trim() }.filter { it.isNotEmpty() }
+        val seen = LinkedHashSet<VirtualFile>()
+        val result = mutableListOf<ResolvedFileEntry>()
 
-    private suspend fun resolveSpecificFiles(project: Project, filePaths: String): List<FileEntry> {
-        val paths = filePaths.split(";").map { it.trim() }.filter { it.isNotEmpty() }
-        return paths.mapNotNull { path ->
-            try {
-                val resolved = resolveFile(project, path)
-                FileEntry(path, resolved.virtualFile)
-            } catch (_: Exception) {
-                null // Skip files that can't be resolved
+        for (token in tokens) {
+            val resolved = resolveFilesByPattern(project, token)
+            for (entry in resolved.files) {
+                if (seen.add(entry.virtualFile)) {
+                    result.add(entry)
+                }
             }
         }
+        return result
     }
 
-    private suspend fun resolveOpenFiles(project: Project): List<FileEntry> {
+    private suspend fun resolveOpenFiles(project: Project): List<ResolvedFileEntry> {
         return readAction {
             val projectDir = project.projectDirectory
             FileEditorManager.getInstance(project).openFiles
@@ -142,41 +143,32 @@ class BatchProblemsToolset : McpToolset {
                     val relativePath = try {
                         projectDir.relativizeIfPossible(vf)
                     } catch (_: IllegalArgumentException) {
-                        return@mapNotNull null // Skip files outside project (different drive, etc.)
+                        return@mapNotNull null
                     }
-                    // Skip library/external files
                     if (relativePath.startsWith("..") || relativePath.contains(".jar!")) {
                         return@mapNotNull null
                     }
-                    FileEntry(relativePath, vf)
+                    ResolvedFileEntry(relativePath, vf)
                 }
         }
     }
 
     private suspend fun analyzeFile(
         project: Project,
-        entry: FileEntry,
+        entry: PsiFileEntry,
         minSeverity: HighlightSeverity,
     ): List<Problem> {
-        val psiFile: PsiFile = readAction {
-            PsiManager.getInstance(project).findFile(entry.virtualFile)
-        } ?: return emptyList()
-
-        val document: Document = readAction {
-            FileDocumentManager.getInstance().getDocument(entry.virtualFile)
-        } ?: return emptyList()
-
         val collectedInfos = mutableListOf<HighlightInfo>()
         val daemonIndicator = DaemonProgressIndicator()
-        val range = readAction { ProperTextRange(0, document.textLength) }
+        val range = readAction { ProperTextRange(0, entry.document.textLength) }
 
         jobToIndicator(currentCoroutineContext().job, daemonIndicator) {
             HighlightingSessionImpl.runInsideHighlightingSession(
-                psiFile, defaultContext(), null, range, false
+                entry.psiFile, defaultContext(), null, range, false
             ) { session ->
                 (session as HighlightingSessionImpl).setMinimumSeverity(minSeverity)
                 val codeAnalyzer = DaemonCodeAnalyzer.getInstance(project) as DaemonCodeAnalyzerImpl
-                val infos = codeAnalyzer.runMainPasses(psiFile, document, daemonIndicator)
+                val infos = codeAnalyzer.runMainPasses(entry.psiFile, entry.document, daemonIndicator)
                 collectedInfos.addAll(infos)
             }
         }
@@ -184,7 +176,7 @@ class BatchProblemsToolset : McpToolset {
         return readAction {
             collectedInfos.mapNotNull { info ->
                 if (info.description != null && info.severity.myVal >= minSeverity.myVal) {
-                    createProblem(document, info)
+                    createProblem(entry.document, info)
                 } else {
                     null
                 }
@@ -192,7 +184,7 @@ class BatchProblemsToolset : McpToolset {
         }
     }
 
-    private fun createProblem(document: Document, info: HighlightInfo): Problem? {
+    private fun createProblem(document: com.intellij.openapi.editor.Document, info: HighlightInfo): Problem? {
         val startOffset = info.startOffset
         if (startOffset < 0 || startOffset >= document.textLength) return null
 

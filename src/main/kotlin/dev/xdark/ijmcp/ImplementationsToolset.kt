@@ -33,7 +33,7 @@ class ImplementationsToolset : McpToolset {
 
     @Serializable
     data class GetImplementationsResult(
-        val symbolName: String,
+        val symbol_name: String,
         val declarationLocation: String,
         val implementations: List<ImplementationInfo>,
         val count: Int,
@@ -47,52 +47,52 @@ class ImplementationsToolset : McpToolset {
         |For a method: returns all overriding methods.
         |
         |Three ways to identify the target:
-        |  1. className — fully qualified name (e.g. "java.util.List"). Works for library/JDK classes.
-        |  2. filePath + symbolName — find symbol by name in a project file.
-        |  3. filePath + line + column — find symbol at a specific position.
+        |  1. class_name — fully qualified name (e.g. "java.util.List"). Works for library/JDK classes.
+        |  2. file_path + symbol_name — find symbol by name in a project file.
+        |  3. file_path + line + column — find symbol at a specific position.
     """)
     suspend fun get_implementations(
-        @McpDescription("Path relative to the project root (not needed when using className)") filePath: String = "",
-        @McpDescription("Name of the symbol. Alternative to line+column.") symbolName: String = "",
-        @McpDescription("1-based line number. Used with column as alternative to symbolName.") line: Int = 0,
+        @McpDescription("Path relative to the project root (not needed when using class_name)") file_path: String = "",
+        @McpDescription("Name of the symbol. Alternative to line+column.") symbol_name: String = "",
+        @McpDescription("1-based line number. Used with column as alternative to symbol_name.") line: Int = 0,
         @McpDescription("1-based column number. Used with line.") column: Int = 0,
-        @McpDescription("Fully qualified class name (e.g. 'java.util.List'). Works for library/JDK classes.") className: String = "",
+        @McpDescription("Fully qualified class name (e.g. 'java.util.List'). Works for library/JDK classes.") class_name: String = "",
         @McpDescription("Search scope: 'project' (default) or 'all' (includes libraries)") scope: String = "project",
     ): GetImplementationsResult {
         val project = currentCoroutineContext().project
 
-        val targetElement = if (className.isNotEmpty()) {
+        val targetElement = if (class_name.isNotEmpty()) {
             // Resolve by FQN — works for library/JDK classes
             readAction {
                 val searchScope = GlobalSearchScope.allScope(project)
-                JavaPsiFacade.getInstance(project).findClass(className, searchScope)
-                    ?: mcpFail("Class '$className' not found")
+                JavaPsiFacade.getInstance(project).findClass(class_name, searchScope)
+                    ?: mcpFail("Class '$class_name' not found")
             }
-        } else if (filePath.isEmpty() && symbolName.isNotEmpty()) {
+        } else if (file_path.isEmpty() && symbol_name.isNotEmpty()) {
             // No file given — try to find by FQN or short name via JavaPsiFacade
             readAction {
                 val searchScope = GlobalSearchScope.allScope(project)
-                JavaPsiFacade.getInstance(project).findClass(symbolName, searchScope)
+                JavaPsiFacade.getInstance(project).findClass(symbol_name, searchScope)
             } ?: readAction {
                 // Try short name lookup
                 val searchScope = GlobalSearchScope.projectScope(project)
                 val classes = JavaPsiFacade.getInstance(project)
-                    .findClasses(symbolName, searchScope)
+                    .findClasses(symbol_name, searchScope)
                 if (classes.size == 1) classes[0]
-                else if (classes.size > 1) mcpFail("Multiple classes found for '$symbolName'. Use className with fully qualified name, or specify filePath.")
+                else if (classes.size > 1) mcpFail("Multiple classes found for '$symbol_name'. Use class_name with fully qualified name, or specify file_path.")
                 else {
                     // Try as short name via short names cache
                     val shortNames = com.intellij.psi.search.PsiShortNamesCache.getInstance(project)
-                        .getClassesByName(symbolName, searchScope)
+                        .getClassesByName(symbol_name, searchScope)
                     if (shortNames.size == 1) shortNames[0]
-                    else if (shortNames.size > 1) mcpFail("Multiple classes found for '$symbolName': ${shortNames.mapNotNull { it.qualifiedName }}. Use className with fully qualified name.")
-                    else mcpFail("Class '$symbolName' not found. Provide filePath to locate the symbol in a specific file.")
+                    else if (shortNames.size > 1) mcpFail("Multiple classes found for '$symbol_name': ${shortNames.mapNotNull { it.qualifiedName }}. Use class_name with fully qualified name.")
+                    else mcpFail("Class '$symbol_name' not found. Provide file_path to locate the symbol in a specific file.")
                 }
             }
         } else {
-            if (filePath.isEmpty()) mcpFail("Provide filePath, className, or symbolName to identify the target")
-            val resolved = resolveFile(project, filePath)
-            resolveTargetElement(resolved, symbolName, line, column)
+            if (file_path.isEmpty()) mcpFail("Provide file_path, class_name, or symbol_name to identify the target")
+            val resolved = resolveFile(project, file_path)
+            resolveTargetElement(resolved, symbol_name, line, column)
         }
 
         val declarationLocation = readAction { formatLocation(project, targetElement) }
@@ -137,7 +137,7 @@ class ImplementationsToolset : McpToolset {
         }
 
         return GetImplementationsResult(
-            symbolName = resolvedName,
+            symbol_name = resolvedName,
             declarationLocation = declarationLocation,
             implementations = implementations,
             count = implementations.size,

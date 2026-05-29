@@ -29,7 +29,7 @@ class FileStructureToolset : McpToolset {
 
     @Serializable
     data class FileStructureResult(
-        val filePath: String,
+        val file_path: String,
         val entries: List<StructureEntry>,
     )
 
@@ -44,10 +44,10 @@ class FileStructureToolset : McpToolset {
     """
     )
     suspend fun get_file_outline(
-        @McpDescription("Path relative to the project root") filePath: String,
+        @McpDescription("Path relative to the project root") file_path: String,
     ): FileStructureResult {
         val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, filePath)
+        val resolved = resolveFile(project, file_path)
 
         val entries = readAction {
             val document = resolved.document
@@ -60,7 +60,7 @@ class FileStructureToolset : McpToolset {
             }
         }
 
-        return FileStructureResult(filePath = filePath, entries = entries)
+        return FileStructureResult(file_path = file_path, entries = entries)
     }
 
     private fun lineOf(element: PsiElement, document: Document): Int {

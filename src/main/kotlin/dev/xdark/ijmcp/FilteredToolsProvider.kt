@@ -35,6 +35,25 @@ class FilteredToolsProvider : McpToolsProvider {
         return allTools.filter { it.descriptor.name !in disabled }
     }
 
+    fun getBuiltInToolNames(): Set<String> {
+        val ourClassLoader = this::class.java.classLoader
+        val builtIn = mutableSetOf<String>()
+        for (tool in cachedProviderTools) {
+            builtIn.add(tool.descriptor.name)
+        }
+        for (toolset in McpToolset.EP.extensionList) {
+            if (toolset::class.java.classLoader != ourClassLoader) {
+                try {
+                    for (tool in toolset.asTools()) {
+                        builtIn.add(tool.descriptor.name)
+                    }
+                } catch (_: Exception) {
+                }
+            }
+        }
+        return builtIn
+    }
+
     fun getAllToolsUnfiltered(): List<McpTool> {
         if (!initialized) {
             initialize()
@@ -71,8 +90,8 @@ class FilteredToolsProvider : McpToolsProvider {
         initialized = true
 
         // Unregister all other providers — keep only ourselves
-        ep.unregisterExtensions({ className, _ ->
-            className == myClassName
+        ep.unregisterExtensions({ class_name, _ ->
+            class_name == myClassName
         }, false)
 
         LOG.info("FilteredToolsProvider initialized: ${cachedProviderTools.size} cached provider tools")

@@ -32,29 +32,29 @@ class CreateFileToolset : McpToolset {
     )
     suspend fun create_file(
         @McpDescription("Path where the file should be created relative to the project root")
-        pathInProject: String,
+        path_in_project: String,
         @McpDescription("Content to write into the new file")
         content: String,
         @McpDescription("Whether to overwrite an existing file. If false, an error is returned if the file exists.")
         overwrite: Boolean = false,
     ) {
         val project = currentCoroutineContext().project
-        val path = project.resolveInProject(pathInProject)
+        val path = project.resolveInProject(path_in_project)
         try {
             writeAction {
                 val parent = VfsUtil.createDirectories(path.parent.pathString)
                 val existing = parent.findChild(path.name)
                 if (existing != null && !overwrite) {
-                    mcpFail("File already exists: $pathInProject. Specify overwrite=true to overwrite it.")
+                    mcpFail("File already exists: $path_in_project. Specify overwrite=true to overwrite it.")
                 }
                 val createdFile = parent.findOrCreateFile(path.name)
                 val document = FileDocumentManager.getInstance().getDocument(createdFile)
-                    ?: mcpFail("Cannot get document for: $pathInProject")
+                    ?: mcpFail("Cannot get document for: $path_in_project")
                 document.setText(content)
                 FileDocumentManager.getInstance().saveDocument(document)
             }
         } catch (e: IOException) {
-            mcpFail("Cannot create file $pathInProject: ${e.message}")
+            mcpFail("Cannot create file $path_in_project: ${e.message}")
         }
     }
 }

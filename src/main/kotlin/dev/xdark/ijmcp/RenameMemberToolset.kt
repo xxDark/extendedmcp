@@ -44,7 +44,7 @@ class RenameMemberToolset : McpToolset {
     data class RenameMemberResult(
         val renamed: Boolean,
         val oldName: String,
-        val newName: String,
+        val new_name: String,
         val affectedUsages: List<AffectedUsage>,
         val message: String,
     )
@@ -59,17 +59,17 @@ class RenameMemberToolset : McpToolset {
     """
     )
     suspend fun rename_member(
-        @McpDescription("Path relative to the project root") filePath: String,
-        @McpDescription("Name of the member to rename") symbolName: String = "",
-        @McpDescription("1-based line number (alternative to symbolName)") line: Int = 0,
+        @McpDescription("Path relative to the project root") file_path: String,
+        @McpDescription("Name of the member to rename") symbol_name: String = "",
+        @McpDescription("1-based line number (alternative to symbol_name)") line: Int = 0,
         @McpDescription("1-based column number (used with line)") column: Int = 0,
-        @McpDescription("New name for the member") newName: String,
-        @McpDescription("Search in comments and strings (default true)") searchInComments: Boolean = true,
-        @McpDescription("Search in non-Java/Kotlin files (default false)") searchInNonJavaFiles: Boolean = false,
+        @McpDescription("New name for the member") new_name: String,
+        @McpDescription("Search in comments and strings (default true)") search_in_comments: Boolean = true,
+        @McpDescription("Search in non-Java/Kotlin files (default false)") search_in_non_java_files: Boolean = false,
     ): RenameMemberResult {
         val project = currentCoroutineContext().project
-        val resolved = resolveFile(project, filePath)
-        val element = resolveTargetElement(resolved, symbolName, line, column)
+        val resolved = resolveFile(project, file_path)
+        val element = resolveTargetElement(resolved, symbol_name, line, column)
 
         val oldName = readAction {
             when (element) {
@@ -85,14 +85,14 @@ class RenameMemberToolset : McpToolset {
             (element as PsiNamedElement).name ?: mcpFail("Element has no name")
         }
 
-        if (oldName == newName) {
-            mcpFail("New name '$newName' is the same as the current name")
+        if (oldName == new_name) {
+            mcpFail("New name '$new_name' is the same as the current name")
         }
 
         // Validate the new name is a legal identifier for the element's language
         readAction {
-            if (!RenameUtil.isValidName(project, element, newName)) {
-                mcpFail("'$newName' is not a valid identifier")
+            if (!RenameUtil.isValidName(project, element, new_name)) {
+                mcpFail("'$new_name' is not a valid identifier")
             }
         }
 
@@ -113,9 +113,9 @@ class RenameMemberToolset : McpToolset {
                 val isMethod = element is PsiMethod || element is KtNamedFunction
 
                 if (isField) {
-                    val existing = containingClass.findFieldByName(newName, false)
+                    val existing = containingClass.findFieldByName(new_name, false)
                     if (existing != null) {
-                        mcpFail("Field '$newName' already exists in class '${containingClass.name}'")
+                        mcpFail("Field '$new_name' already exists in class '${containingClass.name}'")
                     }
                 }
 
@@ -140,11 +140,11 @@ class RenameMemberToolset : McpToolset {
                         if (sibling.navigationElement === element) continue
                         if (element is PsiMethod && sibling.navigationElement === element.navigationElement) continue
 
-                        if (sibling.name != newName) continue
+                        if (sibling.name != new_name) continue
                         val siblingTypes = sibling.parameterList.parameters.map { it.type.presentableText }
                         if (siblingTypes == paramTypes) {
                             val params = paramTypes.joinToString(", ")
-                            mcpFail("Method '$newName($params)' already exists in class '${containingClass.name}'")
+                            mcpFail("Method '$new_name($params)' already exists in class '${containingClass.name}'")
                         }
                     }
                 }
@@ -168,9 +168,9 @@ class RenameMemberToolset : McpToolset {
             val processor = RenameProcessor(
                 project,
                 element,
-                newName,
-                searchInComments,
-                searchInNonJavaFiles,
+                new_name,
+                search_in_comments,
+                search_in_non_java_files,
             )
             processor.run()
         }
@@ -182,9 +182,9 @@ class RenameMemberToolset : McpToolset {
         return RenameMemberResult(
             renamed = true,
             oldName = oldName,
-            newName = newName,
+            new_name = new_name,
             affectedUsages = usagesBefore,
-            message = "Renamed '$oldName' to '$newName'. ${usagesBefore.size} usage(s) updated.",
+            message = "Renamed '$oldName' to '$new_name'. ${usagesBefore.size} usage(s) updated.",
         )
     }
 }

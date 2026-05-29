@@ -34,7 +34,7 @@ class FindUsagesToolset : McpToolset {
 
     @Serializable
     data class FindUsagesResult(
-        val symbolName: String,
+        val symbol_name: String,
         val declarationLocation: String,
         val usages: List<UsageLocation>,
         val count: Int,
@@ -48,35 +48,35 @@ class FindUsagesToolset : McpToolset {
         |Unlike text search, this understands code structure and finds only actual references.
         |
         |Two modes of target identification:
-        |  1. filePath + (symbolName OR line+column) — for symbols in project files
-        |  2. qualifiedClassName + optional symbolName — for library/JDK classes and their members
+        |  1. file_path + (symbol_name OR line+column) — for symbols in project files
+        |  2. qualified_class_name + optional symbol_name — for library/JDK classes and their members
         |
         |Examples:
-        |  - qualifiedClassName="com.intellij.openapi.project.Project" → usages of the class
-        |  - qualifiedClassName="com.intellij.openapi.project.Project", symbolName="getBasePath" → usages of that method
+        |  - qualified_class_name="com.intellij.openapi.project.Project" → usages of the class
+        |  - qualified_class_name="com.intellij.openapi.project.Project", symbol_name="getBasePath" → usages of that method
         |
         |Returns the declaration location and all usage locations with context.
     """
     )
     suspend fun find_usages(
-        @McpDescription("Path relative to the project root. Use this OR qualifiedClassName.") filePath: String = "",
-        @McpDescription("Fully qualified class name (e.g. com.example.MyClass). Use this OR filePath. Supports library classes.") qualifiedClassName: String = "",
-        @McpDescription("Name of the symbol to find usages of. With filePath: alternative to line+column. With qualifiedClassName: method or field name.") symbolName: String = "",
-        @McpDescription("1-based line number of the symbol. Used with column as alternative to symbolName.") line: Int = 0,
+        @McpDescription("Path relative to the project root. Use this OR qualified_class_name.") file_path: String = "",
+        @McpDescription("Fully qualified class name (e.g. com.example.MyClass). Use this OR file_path. Supports library classes.") qualified_class_name: String = "",
+        @McpDescription("Name of the symbol to find usages of. With file_path: alternative to line+column. With qualified_class_name: method or field name.") symbol_name: String = "",
+        @McpDescription("1-based line number of the symbol. Used with column as alternative to symbol_name.") line: Int = 0,
         @McpDescription("1-based column number of the symbol. Used with line.") column: Int = 0,
-        @McpDescription("Index of overloaded method when qualifiedClassName + symbolName matches multiple overloads.") memberIndex: Int = -1,
+        @McpDescription("Index of overloaded method when qualified_class_name + symbol_name matches multiple overloads.") member_index: Int = -1,
         @McpDescription("Search scope: 'project' (default) or 'all' (includes libraries)") scope: String = "project",
-        @McpDescription("Maximum number of usages to return (default 50). Prevents slow searches on common symbols.") maxResults: Int = 50,
+        @McpDescription("Maximum number of usages to return (default 50). Prevents slow searches on common symbols.") max_results: Int = 50,
     ): FindUsagesResult {
         val project = currentCoroutineContext().project
 
-        val targetElement = if (qualifiedClassName.isNotEmpty()) {
-            resolveByQualifiedName(project, qualifiedClassName, symbolName, memberIndex)
-        } else if (filePath.isNotEmpty()) {
-            val resolved = resolveFile(project, filePath)
-            resolveTargetElement(resolved, symbolName, line, column)
+        val targetElement = if (qualified_class_name.isNotEmpty()) {
+            resolveByQualifiedName(project, qualified_class_name, symbol_name, member_index)
+        } else if (file_path.isNotEmpty()) {
+            val resolved = resolveFile(project, file_path)
+            resolveTargetElement(resolved, symbol_name, line, column)
         } else {
-            mcpFail("Provide either filePath or qualifiedClassName")
+            mcpFail("Provide either file_path or qualified_class_name")
         }
 
         val declarationLocation = readAction { formatLocation(project, targetElement) }
@@ -87,13 +87,13 @@ class FindUsagesToolset : McpToolset {
             else -> GlobalSearchScope.projectScope(project)
         }
 
-        // For member searches via qualifiedClassName, narrow scope to files that reference
+        // For member searches via qualified_class_name, narrow scope to files that reference
         // the containing class first. This avoids resolving every text match of common
         // method names (e.g. "getInstance") across all library files.
-        val searchScope = if (qualifiedClassName.isNotEmpty() && symbolName.isNotEmpty()) {
+        val searchScope = if (qualified_class_name.isNotEmpty() && symbol_name.isNotEmpty()) {
             val containingClass = readAction {
-                val cls = JavaPsiFacade.getInstance(project).findClass(qualifiedClassName, GlobalSearchScope.allScope(project))
-                    ?: mcpFail("Class '$qualifiedClassName' not found")
+                val cls = JavaPsiFacade.getInstance(project).findClass(qualified_class_name, GlobalSearchScope.allScope(project))
+                    ?: mcpFail("Class '$qualified_class_name' not found")
                 (cls.navigationElement as? PsiClass) ?: cls
             }
             val classRefFiles = readAction {
@@ -105,7 +105,7 @@ class FindUsagesToolset : McpToolset {
                 files
             }
             if (classRefFiles.isEmpty()) {
-                mcpFail("No references to class '$qualifiedClassName' found in the specified scope")
+                mcpFail("No references to class '$qualified_class_name' found in the specified scope")
             }
             GlobalSearchScope.filesScope(project, classRefFiles)
         } else {
@@ -136,14 +136,14 @@ class FindUsagesToolset : McpToolset {
                     } else null
                 }
                 if (usage != null) results.add(usage)
-                results.size < maxResults // return false to stop search
+                results.size < max_results // return false to stop search
             })
             results
         }
 
-        val truncated = usages.size >= maxResults
+        val truncated = usages.size >= max_results
         return FindUsagesResult(
-            symbolName = resolvedName,
+            symbol_name = resolvedName,
             declarationLocation = declarationLocation,
             usages = usages,
             count = usages.size,
@@ -153,60 +153,60 @@ class FindUsagesToolset : McpToolset {
 
     private suspend fun resolveByQualifiedName(
         project: Project,
-        qualifiedClassName: String,
-        symbolName: String,
-        memberIndex: Int,
+        qualified_class_name: String,
+        symbol_name: String,
+        member_index: Int,
     ): PsiElement {
         return readAction {
             val scope = GlobalSearchScope.allScope(project)
-            val compiledClass = JavaPsiFacade.getInstance(project).findClass(qualifiedClassName, scope)
-                ?: mcpFail("Class '$qualifiedClassName' not found")
+            val compiledClass = JavaPsiFacade.getInstance(project).findClass(qualified_class_name, scope)
+                ?: mcpFail("Class '$qualified_class_name' not found")
             // Navigate to source if available — compiled classes may not resolve references properly
             val psiClass = (compiledClass.navigationElement as? PsiClass) ?: compiledClass
 
-            if (symbolName.isEmpty()) {
+            if (symbol_name.isEmpty()) {
                 psiClass
             } else {
-                findMemberRecursively(psiClass, symbolName, memberIndex, qualifiedClassName)
+                findMemberRecursively(psiClass, symbol_name, member_index, qualified_class_name)
             }
         }
     }
 
     private fun findMemberRecursively(
         psiClass: PsiClass,
-        symbolName: String,
-        memberIndex: Int,
-        qualifiedClassName: String,
+        symbol_name: String,
+        member_index: Int,
+        qualified_class_name: String,
     ): PsiElement {
         // Collect methods and fields from this class and all inner classes (including Companion)
         val methods = mutableListOf<com.intellij.psi.PsiMethod>()
         val fields = mutableListOf<com.intellij.psi.PsiField>()
 
         fun collect(cls: PsiClass) {
-            methods.addAll(cls.findMethodsByName(symbolName, false))
-            cls.findFieldByName(symbolName, false)?.let { fields.add(it) }
+            methods.addAll(cls.findMethodsByName(symbol_name, false))
+            cls.findFieldByName(symbol_name, false)?.let { fields.add(it) }
             for (inner in cls.innerClasses) {
                 collect(inner)
             }
         }
         collect(psiClass)
 
-        if (methods.size > 1 && memberIndex < 0) {
+        if (methods.size > 1 && member_index < 0) {
             val overloads = methods.mapIndexed { i, m ->
                 val params = m.parameterList.parameters.joinToString(", ") { p ->
                     "${p.type.presentableText} ${p.name}"
                 }
-                "  $i: $symbolName($params)"
+                "  $i: $symbol_name($params)"
             }.joinToString("\n")
-            mcpFail("Multiple overloads found for '$symbolName'. Specify memberIndex:\n$overloads")
+            mcpFail("Multiple overloads found for '$symbol_name'. Specify member_index:\n$overloads")
         }
 
         if (methods.isNotEmpty()) {
-            return methods[if (memberIndex >= 0) memberIndex.coerceIn(methods.indices) else 0]
+            return methods[if (member_index >= 0) member_index.coerceIn(methods.indices) else 0]
         }
         if (fields.isNotEmpty()) {
             return fields[0]
         }
-        mcpFail("Member '$symbolName' not found in class '$qualifiedClassName'")
+        mcpFail("Member '$symbol_name' not found in class '$qualified_class_name'")
     }
 }

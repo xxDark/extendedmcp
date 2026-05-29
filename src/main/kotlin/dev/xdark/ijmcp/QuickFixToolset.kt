@@ -51,21 +51,21 @@ class QuickFixToolset : McpToolset {
         |Quick fixes are IDE-suggested corrections for problems like unused imports, type mismatches,
         |missing overrides, etc. — the same fixes shown when hovering over a warning/error in the IDE.
         |
-        |With fixIndex=-1 (default): lists all available fixes at the location.
-        |With fixIndex>=0: applies the fix at that index.
+        |With fix_index=-1 (default): lists all available fixes at the location.
+        |With fix_index>=0: applies the fix at that index.
         |
-        |Typical workflow: first call with fixIndex=-1 to see available fixes, then call again with the desired fixIndex.
+        |Typical workflow: first call with fix_index=-1 to see available fixes, then call again with the desired fix_index.
     """)
     suspend fun apply_quick_fix(
-        @McpDescription("Path relative to the project root") filePath: String,
+        @McpDescription("Path relative to the project root") file_path: String,
         @McpDescription("1-based line number") line: Int,
         @McpDescription("1-based column number") column: Int,
-        @McpDescription("-1 to list available fixes, >= 0 to apply a fix at that index") fixIndex: Int = -1,
+        @McpDescription("-1 to list available fixes, >= 0 to apply a fix at that index") fix_index: Int = -1,
         @McpDescription("Timeout in milliseconds for analysis") timeout: Int = 10000,
     ): QuickFixResult {
         val project = currentCoroutineContext().project
 
-        val resolved = resolveFile(project, filePath)
+        val resolved = resolveFile(project, file_path)
 
         val offset = readAction {
             if (!DocumentUtil.isValidLine(line - 1, resolved.document)) {
@@ -84,7 +84,7 @@ class QuickFixToolset : McpToolset {
         withTimeoutOrNull(timeout.toLong()) {
             coroutineScope {
                 val psiFile = readAction { PsiManager.getInstance(project).findFile(resolved.virtualFile) }
-                    ?: mcpFail("Cannot find PSI file: $filePath")
+                    ?: mcpFail("Cannot find PSI file: $file_path")
                 val daemonIndicator = DaemonProgressIndicator()
                 val range = ProperTextRange(0, resolved.document.textLength)
 
@@ -115,7 +115,7 @@ class QuickFixToolset : McpToolset {
             }
         }
 
-        if (fixIndex == -1) {
+        if (fix_index == -1) {
             val fixes = fixActions.mapIndexed { index, pair ->
                 val action = pair.first
                 val info = pair.second
@@ -129,11 +129,11 @@ class QuickFixToolset : McpToolset {
             return QuickFixResult(fixes = fixes)
         }
 
-        if (fixIndex < 0 || fixIndex >= fixActions.size) {
-            mcpFail("fixIndex $fixIndex is out of range (0..${fixActions.size - 1})")
+        if (fix_index < 0 || fix_index >= fixActions.size) {
+            mcpFail("fix_index $fix_index is out of range (0..${fixActions.size - 1})")
         }
 
-        val actionPair = fixActions[fixIndex]
+        val actionPair = fixActions[fix_index]
         val action = actionPair.first
         val description = action.text
 
