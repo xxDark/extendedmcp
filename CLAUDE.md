@@ -18,11 +18,8 @@ src/main/kotlin/dev/xdark/ijmcp/
   GoToDeclarationToolset.kt    — go_to_declaration
   FileStructureToolset.kt      — get_file_outline
   FindClassToolset.kt          — find_class
-  GradleToolset.kt             — run_gradle_task (supports debug=true for debugger attach)
-  DebuggerToolset.kt           — debug_add_breakpoint, debug_remove_breakpoint, debug_list_breakpoints,
-                                 debug_get_state, debug_wait_for_suspension, debug_get_frames,
-                                 debug_get_variables, debug_resume, debug_step_over, debug_step_into,
-                                 debug_step_out, debug_stop
+  GradleToolset.kt             — run_gradle_task
+  GradleSyncToolset.kt         — gradle_sync
   MoveClassToolset.kt          — move_class
   ChangeSignatureToolset.kt    — change_method_signature
   SafeDeleteToolset.kt         — safe_delete
@@ -128,4 +125,3 @@ User toggles tools via **Tools > MCP Tool Filter** (checkbox dialog). The `list_
 - **Query.forEach vs Kotlin forEach**: IntelliJ's `Query<T>` implements `Iterable<T>`. Calling `query.forEach { ... }` invokes Kotlin's `Iterable.forEach` which calls `iterator()` → `findAll()`, materializing ALL results. For early termination, use `query.forEach(Processor { ... })` explicitly — return `false` to stop.
 - **ReferencesSearch on common names**: Searching for common method names (e.g. `getInstance`, `toString`) with `allScope` triggers expensive Kotlin FIR resolution on thousands of candidate files. Workaround: two-phase search — first find files referencing the containing class (unique name = fast), then search for the method only within those files using `GlobalSearchScope.filesScope()`.
 - **MCP parameter name mismatch**: When a tool parameter has a default value, a name mismatch between what the model sends and what the function declares silently uses the default instead of erroring. Make required parameters truly required (no default) to catch mismatches. E.g. `content: String` not `content: String = ""`.
-- **Debugger callback bridging**: `XValue.computePresentation()`, `XValueContainer.computeChildren()`, and `XExecutionStack.computeStackFrames()` are all callback-based. Bridge to coroutines with `suspendCancellableCoroutine` + `AtomicBoolean` guard to prevent double-resume. These must be called from EDT.

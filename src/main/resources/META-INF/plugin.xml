@@ -40,7 +40,7 @@
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.BatchFileTextToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.CreateFileToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.RenameMemberToolset"/>
-        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.DebuggerToolset"/>
+        <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.GradleSyncToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.ToolFilterToolset"/>
         <mcpServer.mcpToolsProvider implementation="dev.xdark.ijmcp.FilteredToolsProvider"/>
     </extensions>
