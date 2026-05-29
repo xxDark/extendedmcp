@@ -3,6 +3,7 @@ package dev.xdark.ijmcp
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.ui.DialogWrapper
+import com.intellij.openapi.ui.Messages
 import com.intellij.ui.DocumentAdapter
 import com.intellij.ui.SearchTextField
 import com.intellij.ui.components.JBLabel
@@ -11,10 +12,15 @@ import com.intellij.ui.table.JBTable
 import com.intellij.util.ui.JBUI
 import java.awt.BorderLayout
 import java.awt.FlowLayout
+import java.awt.Toolkit
+import java.awt.datatransfer.DataFlavor
+import java.awt.datatransfer.StringSelection
 import javax.swing.*
 import javax.swing.event.DocumentEvent
 import javax.swing.table.AbstractTableModel
 import javax.swing.table.TableRowSorter
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 class ToolFilterAction : AnAction() {
 	override fun actionPerformed(e: AnActionEvent) {
@@ -126,9 +132,20 @@ private class ToolFilterDialog(private val provider: FilteredToolsProvider) : Di
 			add(createButton("Reset") { setAll(true) })
 		}
 
+		val buttonRow2 = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0)).apply {
+			add(createButton("Copy Config") { copyConfig() })
+			add(createButton("Apply Config") { applyConfig() })
+		}
+
+		val buttonsPanel = JPanel().apply {
+			layout = BoxLayout(this, BoxLayout.Y_AXIS)
+			add(buttonRow1)
+			add(buttonRow2)
+		}
+
 		val topPanel = JPanel(BorderLayout(0, JBUI.scale(4))).apply {
 			add(searchField, BorderLayout.NORTH)
-			add(buttonRow1, BorderLayout.SOUTH)
+			add(buttonsPanel, BorderLayout.SOUTH)
 		}
 		panel.add(topPanel, BorderLayout.NORTH)
 
@@ -158,6 +175,33 @@ private class ToolFilterDialog(private val provider: FilteredToolsProvider) : Di
 		tableModel.fireTableDataChanged()
 	}
 
+	private fun copyConfig() {
+		val disabled = tools.filter { !it.enabled }.map { it.name }.sorted()
+		val json = Json { prettyPrint = true }.encodeToString(disabled)
+		Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(json), null)
+	}
+
+	private fun applyConfig() {
+		val clipboard = try {
+			Toolkit.getDefaultToolkit().systemClipboard.getData(DataFlavor.stringFlavor) as? String
+		} catch (_: Exception) {
+			null
+		}
+		val dialog = ApplyConfigDialog(clipboard)
+		if (!dialog.showAndGet()) return
+		val disabled = try {
+			Json.decodeFromString<List<String>>(dialog.textArea.text.trim())
+		} catch (e: Exception) {
+			Messages.showErrorDialog("Invalid JSON: ${e.message}", "Apply Config")
+			return
+		}
+		val disabledSet = disabled.toSet()
+		for (tool in tools) {
+			tool.enabled = tool.name !in disabledSet
+		}
+		tableModel.fireTableDataChanged()
+	}
+
 	private fun updateStatus() {
 		val enabled = tools.count { it.enabled }
 		val builtInEnabled = tools.count { it.isBuiltIn && it.enabled }
@@ -175,5 +219,29 @@ private class ToolFilterDialog(private val provider: FilteredToolsProvider) : Di
 		}
 		FilteredToolsProvider.triggerRefresh()
 		super.doOKAction()
+	}
+}
+
+private class ApplyConfigDialog(clipboard: String?) : DialogWrapper(null) {
+	val textArea = JTextArea(10, 50).apply {
+		lineWrap = true
+		wrapStyleWord = true
+		if (clipboard != null && clipboard.trimStart().startsWith("[")) {
+			text = clipboard
+		}
+	}
+
+	init {
+		title = "Apply Tool Filter Config"
+		init()
+	}
+
+	override fun createCenterPanel(): JComponent {
+		val panel = JPanel(BorderLayout(0, JBUI.scale(4)))
+		panel.add(JBLabel("Paste JSON array of disabled tool names:"), BorderLayout.NORTH)
+		panel.add(JBScrollPane(textArea).apply {
+			preferredSize = JBUI.size(400, 200)
+		}, BorderLayout.CENTER)
+		return panel
 	}
 }
