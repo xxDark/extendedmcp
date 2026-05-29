@@ -10,6 +10,7 @@ import com.intellij.mcpserver.project
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.vfs.VirtualFile
+import dev.xdark.ijmcp.util.detectIndentation
 import dev.xdark.ijmcp.util.resolveFilesByPattern
 import kotlinx.coroutines.currentCoroutineContext
 import kotlin.math.min
@@ -100,8 +101,7 @@ class BatchFileTextToolset : McpToolset {
 
         for ((path, vf) in page) {
             val mark = sb.length
-            sb.append("=== ").append(path).appendLine(" ===")
-            if (appendFileContent(sb, vf, start_line, max_lines)) {
+            if (appendFileContent(sb, path, vf, start_line, max_lines)) {
                 sb.appendLine()
                 filesRead++
             } else {
@@ -120,12 +120,14 @@ class BatchFileTextToolset : McpToolset {
         return sb.toString()
     }
 
-    private suspend fun appendFileContent(sb: StringBuilder, vf: VirtualFile, startLine: Int, maxLines: Int): Boolean {
+    private suspend fun appendFileContent(sb: StringBuilder, path: String, vf: VirtualFile, startLine: Int, maxLines: Int): Boolean {
         return readAction {
             if (vf.fileType.isBinary) return@readAction false
             val document = FileDocumentManager.getInstance().getDocument(vf) ?: return@readAction false
             val lineCount = document.lineCount
             if (lineCount == 0 || startLine > lineCount) return@readAction false
+            val indent = detectIndentation(document)
+            sb.append("=== ").append(path).append(" (").append(indent).appendLine(") ===")
             val endLine = min(startLine + maxLines - 1, lineCount)
             val chars = document.immutableCharSequence
             for (lineNumber in startLine..endLine) {

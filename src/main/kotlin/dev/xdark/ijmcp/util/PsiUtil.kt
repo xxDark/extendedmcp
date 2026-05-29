@@ -135,3 +135,40 @@ fun getContextText(element: PsiElement): String {
     val lineEnd = document.getLineEndOffset(lineNumber)
     return document.getText(TextRange(lineStart, lineEnd)).trim()
 }
+
+fun detectIndentation(document: Document): String {
+    val chars = document.immutableCharSequence
+    val linesToCheck = minOf(document.lineCount, 100)
+
+    var tabLines = 0
+    var spaceGcd = 0
+
+    for (i in 0 until linesToCheck) {
+        val start = document.getLineStartOffset(i)
+        val end = document.getLineEndOffset(i)
+        if (start >= end) continue
+
+        when (chars[start]) {
+            '\t' -> tabLines++
+            ' ' -> {
+                var spaces = 1
+                var j = start + 1
+                while (j < end && chars[j] == ' ') {
+                    spaces++
+                    j++
+                }
+                if (j < end) {
+                    spaceGcd = if (spaceGcd == 0) spaces else gcd(spaceGcd, spaces)
+                }
+            }
+        }
+    }
+
+    return when {
+        tabLines > 0 -> "tabs"
+        spaceGcd > 0 -> "$spaceGcd spaces"
+        else -> "unknown"
+    }
+}
+
+private fun gcd(a: Int, b: Int): Int = if (b == 0) a else gcd(b, a % b)

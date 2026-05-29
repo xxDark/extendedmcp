@@ -16,6 +16,7 @@ import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.PsiShortNamesCache
+import dev.xdark.ijmcp.util.detectIndentation
 import dev.xdark.ijmcp.util.formatLocation
 import kotlinx.coroutines.currentCoroutineContext
 
@@ -133,6 +134,11 @@ class FindClassToolset : McpToolset {
         return buildString {
             append(kind).append(' ').append(qualifiedName)
             append("\n  Location: ").append(location)
+            val indentVf = cls.containingFile?.virtualFile
+            if (indentVf != null && ProjectFileIndex.getInstance(project).isInContent(indentVf)) {
+                val doc = FileDocumentManager.getInstance().getDocument(indentVf)
+                if (doc != null) append("\n  Indent: ").append(detectIndentation(doc))
+            }
             if (superClass != null) append("\n  Extends: ").append(superClass)
             if (interfaces.isNotEmpty()) append("\n  Implements: ").append(interfaces.joinToString(", "))
 
