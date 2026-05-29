@@ -15,15 +15,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
-
 class ExtendedRefactoringToolset : McpToolset {
-
-    @Serializable
-    data class OptimizeImportsResult(
-        val filesProcessed: Int,
-        val message: String,
-    )
 
     @McpTool
     @McpDescription(
@@ -36,7 +28,7 @@ class ExtendedRefactoringToolset : McpToolset {
     )
     suspend fun optimize_imports(
         @McpDescription("Path relative to the project root, or glob pattern (e.g. 'src/**/*.kt')") file_path: String,
-    ): OptimizeImportsResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val psiFiles = resolveFilesByPattern(project, file_path).resolvePsi(project)
 
@@ -55,11 +47,8 @@ class ExtendedRefactoringToolset : McpToolset {
         }
         finished.await()
 
-        return OptimizeImportsResult(
-            filesProcessed = psiFiles.size,
-            message = if (psiFiles.size == 1) "Optimized imports in ${psiFiles[0].relativePath}"
+        return if (psiFiles.size == 1) "Optimized imports in ${psiFiles[0].relativePath}"
             else "Optimized imports in ${psiFiles.size} files"
-        )
     }
 
 }

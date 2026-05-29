@@ -19,7 +19,6 @@ import dev.xdark.ijmcp.util.resolveFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtPsiFactory
@@ -27,16 +26,10 @@ import org.jetbrains.kotlin.resolve.ImportPath
 
 class AddImportToolset : McpToolset {
 
-    @Serializable
     data class AddImportResult(
         val added: Boolean,
         val import: String,
         val message: String,
-    )
-
-    @Serializable
-    data class AddImportsResult(
-        val results: List<AddImportResult>,
     )
 
     @McpTool
@@ -54,7 +47,7 @@ class AddImportToolset : McpToolset {
         @McpDescription("Fully qualified names to import, semicolon-separated (e.g. 'java.util.List;java.util.Map')") fq_names: String,
         @McpDescription("For Java: static import (default false)") is_static: Boolean = false,
         @McpDescription("Wildcard import .* (default false)") is_all_under: Boolean = false,
-    ): AddImportsResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, file_path)
         val isKotlin = resolved.psiFile is KtFile
@@ -72,7 +65,23 @@ class AddImportToolset : McpToolset {
             FileDocumentManager.getInstance().saveDocument(resolved.document)
         }
 
-        return AddImportsResult(results)
+        val added = results.filter { it.added }
+        val skipped = results.filter { !it.added }
+        return buildString {
+            if (added.size == 1) {
+                append("Added import ${added[0].import}")
+            } else if (added.size > 1) {
+                append("Added ${added.size} imports:\n")
+                added.forEach { append("  ${it.import}\n") }
+            }
+            if (skipped.isNotEmpty()) {
+                if (added.isNotEmpty()) append("\n")
+                skipped.forEach { append("${it.import}: ${it.message}\n") }
+            }
+            if (added.isEmpty() && skipped.isEmpty()) {
+                append("No imports to add")
+            }
+        }.trimEnd()
     }
 
     private suspend fun addJavaImport(

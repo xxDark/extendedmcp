@@ -25,23 +25,14 @@ import com.intellij.psi.PsiManager
 import com.intellij.util.DocumentUtil
 import dev.xdark.ijmcp.util.resolveFile
 import kotlinx.coroutines.*
-import kotlinx.serialization.Serializable
 
 class QuickFixToolset : McpToolset {
 
-    @Serializable
     data class FixInfo(
         val index: Int,
         val description: String,
         val problemDescription: String,
         val severity: String,
-    )
-
-    @Serializable
-    data class QuickFixResult(
-        val fixes: List<FixInfo>? = null,
-        val applied: Boolean? = null,
-        val fixDescription: String? = null,
     )
 
     @McpTool
@@ -62,7 +53,7 @@ class QuickFixToolset : McpToolset {
         @McpDescription("1-based column number") column: Int,
         @McpDescription("-1 to list available fixes, >= 0 to apply a fix at that index") fix_index: Int = -1,
         @McpDescription("Timeout in milliseconds for analysis") timeout: Int = 10000,
-    ): QuickFixResult {
+    ): Any {
         val project = currentCoroutineContext().project
 
         val resolved = resolveFile(project, file_path)
@@ -116,17 +107,21 @@ class QuickFixToolset : McpToolset {
         }
 
         if (fix_index == -1) {
-            val fixes = fixActions.mapIndexed { index, pair ->
-                val action = pair.first
-                val info = pair.second
-                FixInfo(
-                    index = index,
-                    description = action.text,
-                    problemDescription = info.description ?: "",
-                    severity = info.severity.name,
-                )
+            if (fixActions.isEmpty()) {
+                return "No quick fixes available at $line:$column"
             }
-            return QuickFixResult(fixes = fixes)
+            return buildString {
+                appendLine("${fixActions.size} quick fixes available at $line:$column:")
+                appendLine()
+                for ((index, pair) in fixActions.withIndex()) {
+                    val action = pair.first
+                    val info = pair.second
+                    appendLine("  $index: ${action.text}")
+                    if (!info.description.isNullOrEmpty()) {
+                        appendLine("     problem: ${info.description} [${info.severity.name}]")
+                    }
+                }
+            }.trimEnd()
         }
 
         if (fix_index < 0 || fix_index >= fixActions.size) {
@@ -153,6 +148,6 @@ class QuickFixToolset : McpToolset {
             FileDocumentManager.getInstance().saveDocument(resolved.document)
         }
 
-        return QuickFixResult(applied = true, fixDescription = description)
+        return "Applied fix: $description"
     }
 }

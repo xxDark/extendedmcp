@@ -22,14 +22,12 @@ import dev.xdark.ijmcp.util.resolvePsi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
 import org.jetbrains.kotlin.kdoc.psi.api.KDoc
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.psi.*
 
 class DocumentationToolset : McpToolset {
 
-    @Serializable
     data class AddDocResult(
         val success: Boolean,
         val targetName: String,
@@ -37,19 +35,12 @@ class DocumentationToolset : McpToolset {
         val message: String,
     )
 
-    @Serializable
     data class DocEntry(
         val name: String,
         val signature: String,
         val documentation: String?,
     )
 
-    @Serializable
-    data class GetDocResult(
-        val entries: List<DocEntry>,
-    )
-
-    @Serializable
     data class UndocumentedElement(
         val kind: String,
         val name: String,
@@ -58,20 +49,11 @@ class DocumentationToolset : McpToolset {
         val class_name: String = "",
     )
 
-    @Serializable
     data class FileMissingDocs(
         val file_path: String,
         val undocumented: List<UndocumentedElement>,
         val total: Int,
         val documented: Int,
-    )
-
-    @Serializable
-    data class MissingDocResult(
-        val files: List<FileMissingDocs>,
-        val totalFiles: Int,
-        val totalUndocumented: Int,
-        val totalElements: Int,
     )
 
     @McpTool
@@ -100,17 +82,18 @@ class DocumentationToolset : McpToolset {
         @McpDescription("Simple name of the target class (optional if file has one class)") class_name: String = "",
         @McpDescription("Name of the method or field to document (omit to document the class itself)") member_name: String = "",
         @McpDescription("Index of the overloaded method to document (from the overload list error)") member_index: Int = -1,
-    ): AddDocResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, file_path)
 
         val isKotlin = resolved.psiFile is KtFile
 
-        return if (isKotlin) {
+        val result = if (isKotlin) {
             addKotlinDoc(resolved, documentation, class_name, member_name, member_index)
         } else {
             addJavaDoc(resolved, documentation, class_name, member_name, member_index)
         }
+        return result.message
     }
 
     @McpTool
@@ -136,26 +119,43 @@ class DocumentationToolset : McpToolset {
         @McpDescription("Simple name of the target class (only with file_path)") class_name: String = "",
         @McpDescription("Name of the method or field (omit to get class docs)") member_name: String = "",
         @McpDescription("Index of a specific overloaded method") member_index: Int = -1,
-    ): GetDocResult {
+    ): Any {
         val project = currentCoroutineContext().project
 
-        if (qualified_class_name.isNotEmpty()) {
-            return getDocByQualifiedName(project, qualified_class_name, member_name, member_index)
-        }
-
-        if (file_path.isEmpty()) {
-            mcpFail("Provide either qualified_class_name or file_path")
-        }
-
-        val resolved = resolveFile(project, file_path)
-        val isKotlin = resolved.psiFile is KtFile
-
-        return if (isKotlin) {
-            getKotlinDoc(resolved, class_name, member_name, member_index)
+        val entries = if (qualified_class_name.isNotEmpty()) {
+            getDocByQualifiedName(project, qualified_class_name, member_name, member_index)
         } else {
-            getJavaDoc(resolved, class_name, member_name, member_index)
+            if (file_path.isEmpty()) {
+                mcpFail("Provide either qualified_class_name or file_path")
+            }
+            val resolved = resolveFile(project, file_path)
+            val isKotlin = resolved.psiFile is KtFile
+            if (isKotlin) {
+                getKotlinDoc(resolved, class_name, member_name, member_index)
+            } else {
+                getJavaDoc(resolved, class_name, member_name, member_index)
+            }
         }
+
+        return formatDocEntries(entries)
     }
+
+    private fun formatDocEntries(entries: List<DocEntry>): String = buildString {
+        for ((i, entry) in entries.withIndex()) {
+            if (i > 0) {
+                appendLine()
+                appendLine()
+            }
+            appendLine("Documentation for ${entry.signature}:")
+            appendLine()
+            val doc = entry.documentation
+            if (doc != null) {
+                append(doc)
+            } else {
+                append("(no documentation)")
+            }
+        }
+    }.trimEnd()
 
     @McpTool
     @McpDescription(
@@ -172,12 +172,12 @@ class DocumentationToolset : McpToolset {
     suspend fun missing_documentation(
         @McpDescription("Path relative to the project root, or glob pattern (e.g. 'src/**/*.java')") file_path: String,
         @McpDescription("Include private members (default false)") include_private: Boolean = false,
-    ): MissingDocResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val resolved = resolveFilesByPattern(project, file_path, extensions = setOf("java", "kt"))
 
         if (resolved.files.isEmpty()) {
-            return MissingDocResult(emptyList(), 0, 0, 0)
+            return "No matching files found"
         }
 
         val psiFiles = resolved.resolvePsi(project)
@@ -198,12 +198,23 @@ class DocumentationToolset : McpToolset {
             }
         }
 
-        return MissingDocResult(
-            files = allFileResults,
-            totalFiles = psiFiles.size,
-            totalUndocumented = allFileResults.sumOf { it.undocumented.size },
-            totalElements = allFileResults.sumOf { it.total },
-        )
+        val totalUndocumented = allFileResults.sumOf { it.undocumented.size }
+        if (totalUndocumented == 0) {
+            return "All elements are documented (${psiFiles.size} files checked)"
+        }
+
+        return buildString {
+            for (fileResult in allFileResults) {
+                appendLine("${fileResult.undocumented.size} undocumented elements in ${fileResult.file_path} (${fileResult.total} total, ${fileResult.documented} documented):")
+                appendLine()
+                for (elem in fileResult.undocumented) {
+                    val prefix = if (elem.class_name.isNotEmpty()) "${elem.class_name}." else ""
+                    appendLine("  ${elem.kind} $prefix${elem.signature} [line ${elem.line}]")
+                }
+                appendLine()
+            }
+            append("Total: $totalUndocumented undocumented across ${allFileResults.size} files (${psiFiles.size} files checked)")
+        }
     }
 
     private fun docLineOf(element: PsiElement, document: Document): Int {
@@ -448,7 +459,7 @@ class DocumentationToolset : McpToolset {
         qualified_class_name: String,
         member_name: String,
         member_index: Int,
-    ): GetDocResult {
+    ): List<DocEntry> {
         return readAction {
             val scope = GlobalSearchScope.allScope(project)
             val compiledClass = JavaPsiFacade.getInstance(project).findClass(qualified_class_name, scope)
@@ -458,13 +469,11 @@ class DocumentationToolset : McpToolset {
 
             if (member_name.isEmpty()) {
                 val doc = (psiClass as? PsiDocCommentOwner)?.docComment?.text
-                GetDocResult(
-                    listOf(
-                        DocEntry(
-                            psiClass.name ?: "<anonymous>",
-                            "class ${compiledClass.qualifiedName}",
-                            doc
-                        )
+                listOf(
+                    DocEntry(
+                        psiClass.name ?: "<anonymous>",
+                        "class ${compiledClass.qualifiedName}",
+                        doc
                     )
                 )
             } else {
@@ -477,23 +486,21 @@ class DocumentationToolset : McpToolset {
                     } else {
                         methods.toList()
                     }
-                    GetDocResult(targets.map { m ->
+                    targets.map { m ->
                         // Navigate to source for doc comment
                         val srcMethod = (m.navigationElement as? PsiDocCommentOwner) ?: m
                         val params = m.parameterList.parameters.joinToString(", ") { p ->
                             "${p.type.presentableText} ${p.name}"
                         }
                         DocEntry(m.name, "$member_name($params)", srcMethod.docComment?.text)
-                    })
+                    }
                 } else if (field != null) {
                     val srcField = (field.navigationElement as? PsiDocCommentOwner) ?: field
-                    GetDocResult(
-                        listOf(
-                            DocEntry(
-                                field.name ?: member_name,
-                                field.text.lines().first().trim(),
-                                srcField.docComment?.text
-                            )
+                    listOf(
+                        DocEntry(
+                            field.name ?: member_name,
+                            field.text.lines().first().trim(),
+                            srcField.docComment?.text
                         )
                     )
                 } else {
@@ -508,7 +515,7 @@ class DocumentationToolset : McpToolset {
         class_name: String,
         member_name: String,
         member_index: Int,
-    ): GetDocResult {
+    ): List<DocEntry> {
         return readAction {
             val classOwner = resolved.psiFile as? PsiClassOwner
                 ?: mcpFail("File is not a Java class file")
@@ -524,7 +531,7 @@ class DocumentationToolset : McpToolset {
 
             if (member_name.isEmpty()) {
                 val doc = psiClass.docComment?.text
-                GetDocResult(listOf(DocEntry(psiClass.name ?: "<anonymous>", "class ${psiClass.name}", doc)))
+                listOf(DocEntry(psiClass.name ?: "<anonymous>", "class ${psiClass.name}", doc))
             } else {
                 val methods = psiClass.findMethodsByName(member_name, false)
                 val field = psiClass.findFieldByName(member_name, false)
@@ -535,20 +542,18 @@ class DocumentationToolset : McpToolset {
                     } else {
                         methods.toList()
                     }
-                    GetDocResult(targets.map { m ->
+                    targets.map { m ->
                         val params = m.parameterList.parameters.joinToString(", ") { p ->
                             "${p.type.presentableText} ${p.name}"
                         }
                         DocEntry(m.name, "$member_name($params)", m.docComment?.text)
-                    })
+                    }
                 } else if (field != null) {
-                    GetDocResult(
-                        listOf(
-                            DocEntry(
-                                field.name ?: member_name,
-                                field.text.lines().first().trim(),
-                                field.docComment?.text
-                            )
+                    listOf(
+                        DocEntry(
+                            field.name ?: member_name,
+                            field.text.lines().first().trim(),
+                            field.docComment?.text
                         )
                     )
                 } else {
@@ -563,7 +568,7 @@ class DocumentationToolset : McpToolset {
         class_name: String,
         member_name: String,
         member_index: Int,
-    ): GetDocResult {
+    ): List<DocEntry> {
         return readAction {
             val ktFile = resolved.psiFile as? KtFile
                 ?: mcpFail("File is not a Kotlin file")
@@ -574,7 +579,7 @@ class DocumentationToolset : McpToolset {
 
                 if (member_name.isEmpty()) {
                     val doc = PsiTreeUtil.getChildOfType(ktClass, KDoc::class.java)?.text
-                    GetDocResult(listOf(DocEntry(ktClass.name ?: "<anonymous>", "class ${ktClass.name}", doc)))
+                    listOf(DocEntry(ktClass.name ?: "<anonymous>", "class ${ktClass.name}", doc))
                 } else {
                     val body = ktClass.body ?: mcpFail("Class '${ktClass.name}' has no body")
                     getKotlinMemberDocs(body.declarations, member_name, member_index, "in class '${ktClass.name}'")
@@ -606,7 +611,7 @@ class DocumentationToolset : McpToolset {
                 if (classes.isEmpty()) mcpFail("No classes found and no member_name specified")
                 val ktClass = classes[0]
                 val doc = PsiTreeUtil.getChildOfType(ktClass, KDoc::class.java)?.text
-                GetDocResult(listOf(DocEntry(ktClass.name ?: "<anonymous>", "class ${ktClass.name}", doc)))
+                listOf(DocEntry(ktClass.name ?: "<anonymous>", "class ${ktClass.name}", doc))
             }
         }
     }
@@ -616,7 +621,7 @@ class DocumentationToolset : McpToolset {
         member_name: String,
         member_index: Int,
         context: String,
-    ): GetDocResult {
+    ): List<DocEntry> {
         val functions = declarations.filter { it is KtNamedFunction && it.name == member_name }
         val properties = declarations.filter { it is KtProperty && it.name == member_name }
 
@@ -626,7 +631,7 @@ class DocumentationToolset : McpToolset {
             } else {
                 functions
             }
-            return GetDocResult(targets.map { f ->
+            return targets.map { f ->
                 val func = f as KtNamedFunction
                 val params = func.valueParameters.joinToString(", ") { p ->
                     "${p.name ?: "_"}: ${p.typeReference?.text ?: "Any"}"
@@ -636,17 +641,15 @@ class DocumentationToolset : McpToolset {
                     "$member_name($params)",
                     PsiTreeUtil.getChildOfType(f, KDoc::class.java)?.text
                 )
-            })
+            }
         }
         if (properties.isNotEmpty()) {
             val prop = properties[0] as KtProperty
-            return GetDocResult(
-                listOf(
-                    DocEntry(
-                        prop.name ?: member_name,
-                        prop.text.lines().first().trim(),
-                        PsiTreeUtil.getChildOfType(prop, KDoc::class.java)?.text
-                    )
+            return listOf(
+                DocEntry(
+                    prop.name ?: member_name,
+                    prop.text.lines().first().trim(),
+                    PsiTreeUtil.getChildOfType(prop, KDoc::class.java)?.text
                 )
             )
         }

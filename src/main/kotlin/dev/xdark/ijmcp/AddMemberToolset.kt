@@ -19,14 +19,12 @@ import dev.xdark.ijmcp.util.resolveFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtPsiFactory
 
 class AddMemberToolset : McpToolset {
 
-    @Serializable
     data class AddMemberResult(
         val added: Boolean,
         val class_name: String,
@@ -54,16 +52,16 @@ class AddMemberToolset : McpToolset {
         @McpDescription("Path relative to the project root") file_path: String,
         @McpDescription("The full method/function source text") method_text: String,
         @McpDescription("Simple name of the target class (optional if file has one class)") class_name: String = "",
-    ): AddMemberResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, file_path)
 
         val isKotlin = resolved.psiFile is KtFile
 
-        if (isKotlin) {
-            return addKotlinMethod(resolved, method_text, class_name)
+        return if (isKotlin) {
+            addKotlinMethod(resolved, method_text, class_name).message
         } else {
-            return addJavaMethod(resolved, method_text, class_name)
+            addJavaMethod(resolved, method_text, class_name).message
         }
     }
 
@@ -89,16 +87,16 @@ class AddMemberToolset : McpToolset {
         @McpDescription("Path relative to the project root") file_path: String,
         @McpDescription("The full field/property source text") field_text: String,
         @McpDescription("Simple name of the target class (optional if file has one class)") class_name: String = "",
-    ): AddMemberResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, file_path)
 
         val isKotlin = resolved.psiFile is KtFile
 
-        if (isKotlin) {
-            return addKotlinProperty(resolved, field_text, class_name)
+        return if (isKotlin) {
+            addKotlinProperty(resolved, field_text, class_name).message
         } else {
-            return addJavaField(resolved, field_text, class_name)
+            addJavaField(resolved, field_text, class_name).message
         }
     }
 

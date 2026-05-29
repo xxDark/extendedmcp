@@ -13,29 +13,12 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.refactoring.safeDelete.SafeDeleteProcessor
 import dev.xdark.ijmcp.util.formatLocation
-import dev.xdark.ijmcp.util.getContextText
 import dev.xdark.ijmcp.util.resolveFile
 import dev.xdark.ijmcp.util.resolveTargetElement
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
-
 class SafeDeleteToolset : McpToolset {
-
-    @Serializable
-    data class UsageInfo(
-        val location: String,
-        val context: String,
-    )
-
-    @Serializable
-    data class SafeDeleteResult(
-        val deleted: Boolean,
-        val symbol_name: String,
-        val usages: List<UsageInfo>,
-        val message: String,
-    )
 
     @McpTool
     @McpDescription("""
@@ -54,7 +37,7 @@ class SafeDeleteToolset : McpToolset {
         @McpDescription("Delete even if there are usages (default false)") force: Boolean = false,
         @McpDescription("Search in comments and strings (default true)") search_in_comments: Boolean = true,
         @McpDescription("Search in non-Java/Kotlin files (default true)") search_in_non_java_files: Boolean = true,
-    ): SafeDeleteResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, file_path)
 
@@ -65,24 +48,17 @@ class SafeDeleteToolset : McpToolset {
         }
 
         // Find usages before attempting delete
-        val usages = readAction {
+        val usageLocations = readAction {
             ReferencesSearch.search(element, GlobalSearchScope.projectScope(project))
                 .findAll()
-                .map { ref ->
-                    UsageInfo(
-                        location = formatLocation(project, ref.element),
-                        context = getContextText(ref.element),
-                    )
-                }
+                .map { ref -> formatLocation(project, ref.element) }
         }
 
-        if (usages.isNotEmpty() && !force) {
-            return SafeDeleteResult(
-                deleted = false,
-                symbol_name = name,
-                usages = usages,
-                message = "Cannot safely delete '$name': ${usages.size} usage(s) found. Fix them first or use force=true.",
-            )
+        if (usageLocations.isNotEmpty() && !force) {
+            return buildString {
+                append("Cannot safely delete '$name': ${usageLocations.size} usage(s) found. Fix them first or use force=true.\n")
+                usageLocations.forEach { append("  $it\n") }
+            }.trimEnd()
         }
 
         // Proceed with safe delete
@@ -97,15 +73,10 @@ class SafeDeleteToolset : McpToolset {
             processor.run()
         }
 
-        return SafeDeleteResult(
-            deleted = true,
-            symbol_name = name,
-            usages = usages,
-            message = if (usages.isEmpty()) {
-                "Deleted '$name' (no usages found)."
-            } else {
-                "Deleted '$name' (force). ${usages.size} usage(s) may need attention."
-            },
-        )
+        return if (usageLocations.isEmpty()) {
+            "Deleted '$name' (no usages found)."
+        } else {
+            "Deleted '$name' (force). ${usageLocations.size} usage(s) may need attention."
+        }
     }
 }

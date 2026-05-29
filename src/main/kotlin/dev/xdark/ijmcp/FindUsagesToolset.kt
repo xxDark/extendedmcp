@@ -20,26 +20,8 @@ import dev.xdark.ijmcp.util.getContextText
 import dev.xdark.ijmcp.util.resolveFile
 import dev.xdark.ijmcp.util.resolveTargetElement
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.serialization.Serializable
 
 class FindUsagesToolset : McpToolset {
-
-    @Serializable
-    data class UsageLocation(
-        val file: String,
-        val line: Int,
-        val column: Int,
-        val context: String,
-    )
-
-    @Serializable
-    data class FindUsagesResult(
-        val symbol_name: String,
-        val declarationLocation: String,
-        val usages: List<UsageLocation>,
-        val count: Int,
-        val truncated: Boolean = false,
-    )
 
     @McpTool
     @McpDescription(
@@ -67,7 +49,7 @@ class FindUsagesToolset : McpToolset {
         @McpDescription("Index of overloaded method when qualified_class_name + symbol_name matches multiple overloads.") member_index: Int = -1,
         @McpDescription("Search scope: 'project' (default) or 'all' (includes libraries)") scope: String = "project",
         @McpDescription("Maximum number of usages to return (default 50). Prevents slow searches on common symbols.") max_results: Int = 50,
-    ): FindUsagesResult {
+    ): Any {
         val project = currentCoroutineContext().project
 
         val targetElement = if (qualified_class_name.isNotEmpty()) {
@@ -92,7 +74,8 @@ class FindUsagesToolset : McpToolset {
         // method names (e.g. "getInstance") across all library files.
         val searchScope = if (qualified_class_name.isNotEmpty() && symbol_name.isNotEmpty()) {
             val containingClass = readAction {
-                val cls = JavaPsiFacade.getInstance(project).findClass(qualified_class_name, GlobalSearchScope.allScope(project))
+                val cls = JavaPsiFacade.getInstance(project)
+                    .findClass(qualified_class_name, GlobalSearchScope.allScope(project))
                     ?: mcpFail("Class '$qualified_class_name' not found")
                 (cls.navigationElement as? PsiClass) ?: cls
             }
@@ -112,43 +95,43 @@ class FindUsagesToolset : McpToolset {
             baseScope
         }
 
+        data class UsageEntry(val location: String, val context: String)
+
         val usages = readAction {
-            val results = mutableListOf<UsageLocation>()
+            val results = mutableListOf<UsageEntry>()
             ReferencesSearch.search(targetElement, searchScope).forEach(com.intellij.util.Processor { ref ->
                 val element = ref.element
                 val loc = formatLocation(project, element)
-                val usage = if (loc.endsWith("(library)")) {
-                    UsageLocation(
-                        file = loc,
-                        line = 0,
-                        column = 0,
-                        context = getContextText(element),
-                    )
-                } else {
-                    val parts = loc.split(":")
-                    if (parts.size >= 3) {
-                        UsageLocation(
-                            file = parts[0],
-                            line = parts[1].toIntOrNull() ?: 0,
-                            column = parts[2].toIntOrNull() ?: 0,
-                            context = getContextText(element),
-                        )
-                    } else null
-                }
-                if (usage != null) results.add(usage)
+                val context = getContextText(element)
+                results.add(UsageEntry(loc, context))
                 results.size < max_results // return false to stop search
             })
             results
         }
 
         val truncated = usages.size >= max_results
-        return FindUsagesResult(
-            symbol_name = resolvedName,
-            declarationLocation = declarationLocation,
-            usages = usages,
-            count = usages.size,
-            truncated = truncated,
-        )
+
+        return buildString {
+            val count = usages.size
+            append(count)
+            append(" usage")
+            if (count != 1) append("s")
+            append(" of ")
+            append(resolvedName)
+            append(" (declared at ")
+            append(declarationLocation)
+            append(")")
+            if (truncated) append(" (truncated at $max_results results)")
+            append(":\n")
+
+            for (usage in usages) {
+                append("\n")
+                append(usage.location)
+                append("\n  ")
+                append(usage.context)
+                append("\n")
+            }
+        }
     }
 
     private suspend fun resolveByQualifiedName(

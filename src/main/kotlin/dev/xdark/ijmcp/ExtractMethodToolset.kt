@@ -37,7 +37,7 @@ class ExtractMethodToolset : McpToolset {
         @McpDescription("1-based start line of the code to extract") start_line: Int,
         @McpDescription("1-based end line of the code to extract (inclusive)") end_line: Int,
         @McpDescription("Name for the new method") method_name: String,
-    ): String {
+    ): Any {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, file_path)
 

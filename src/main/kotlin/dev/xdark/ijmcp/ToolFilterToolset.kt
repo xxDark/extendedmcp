@@ -6,29 +6,35 @@ import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.mcpFail
-import kotlinx.serialization.Serializable
 
 class ToolFilterToolset : McpToolset {
 
-    @Serializable
-    data class ToolInfo(val name: String, val description: String, val enabled: Boolean)
-
-    @Serializable
-    data class ToolListResult(val tools: List<ToolInfo>)
-
     @McpTool
     @McpDescription("Lists all registered MCP tools with their enabled/disabled status.")
-    suspend fun list_tools_filter(): ToolListResult {
+    suspend fun list_tools_filter(): Any {
         val provider = FilteredToolsProvider.getInstance()
             ?: mcpFail("FilteredToolsProvider not registered")
         val disabled = ToolFilterState.getInstance().getDisabledSet()
         val tools = provider.getAllToolsUnfiltered().map { tool ->
-            ToolInfo(
-                name = tool.descriptor.name,
-                description = tool.descriptor.description,
-                enabled = tool.descriptor.name !in disabled,
+            Triple(
+                tool.descriptor.name,
+                tool.descriptor.description,
+                tool.descriptor.name !in disabled,
             )
-        }.sortedBy { it.name }
-        return ToolListResult(tools)
+        }.sortedBy { it.first }
+
+        return buildString {
+            append(tools.size)
+            append(" tools registered:\n\n")
+            for ((name, description, enabled) in tools) {
+                val status = if (enabled) "enabled" else "DISABLED"
+                append("[$status] $name")
+                val firstLine = description.lineSequence().firstOrNull { it.isNotBlank() }?.trim()
+                if (firstLine != null) {
+                    append(" — $firstLine")
+                }
+                append("\n")
+            }
+        }
     }
 }

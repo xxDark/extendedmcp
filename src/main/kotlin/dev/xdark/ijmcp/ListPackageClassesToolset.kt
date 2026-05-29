@@ -12,26 +12,12 @@ import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
 import com.intellij.psi.search.GlobalSearchScope
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.serialization.Serializable
 
 class ListPackageClassesToolset : McpToolset {
 
-    @Serializable
-    data class ClassEntry(
-        val qualifiedName: String,
-        val kind: String,
-    )
-
-    @Serializable
-    data class ListPackageResult(
-        val package_name: String,
-        val classes: List<ClassEntry>,
-        val subPackages: List<String>,
-        val count: Int,
-    )
-
     @McpTool
-    @McpDescription("""
+    @McpDescription(
+        """
         |Lists all classes in a Java/Kotlin package, including library and JDK packages.
         |
         |Returns class names with their kind (class/interface/enum/annotation) and any sub-packages.
@@ -40,12 +26,13 @@ class ListPackageClassesToolset : McpToolset {
         |Examples:
         |  package_name="java.util.concurrent.locks"
         |  package_name="com.google.common.collect", recursive=true
-    """)
+    """
+    )
     suspend fun list_package_classes(
         @McpDescription("Fully qualified package name (e.g. 'java.util.concurrent')") package_name: String,
         @McpDescription("Include classes from sub-packages (default false)") recursive: Boolean = false,
         @McpDescription("Search scope: 'all' (default, includes libraries) or 'project'") scope: String = "all",
-    ): ListPackageResult {
+    ): Any {
         val project = currentCoroutineContext().project
 
         val searchScope = when (scope) {
@@ -57,41 +44,63 @@ class ListPackageClassesToolset : McpToolset {
             val psiPackage = JavaPsiFacade.getInstance(project).findPackage(package_name)
                 ?: mcpFail("Package '$package_name' not found")
 
+            data class ClassEntry(val qualifiedName: String, val kind: String)
+
             val classes = mutableListOf<ClassEntry>()
             val subPackages = mutableListOf<String>()
 
-            collectClasses(psiPackage, searchScope, recursive, classes, subPackages)
+            fun collectClasses(pkg: com.intellij.psi.PsiPackage) {
+                for (cls in pkg.getClasses(searchScope)) {
+                    val qn = cls.qualifiedName ?: continue
+                    if (qn.contains("$")) continue
+                    if (classes.any { it.qualifiedName == qn }) continue
+                    classes.add(ClassEntry(qualifiedName = qn, kind = classKind(cls)))
+                }
+                for (sub in pkg.getSubPackages(searchScope)) {
+                    val subName = sub.qualifiedName
+                    if (subName in subPackages) continue
+                    subPackages.add(subName)
+                    if (recursive) {
+                        collectClasses(sub)
+                    }
+                }
+            }
 
-            ListPackageResult(
-                package_name = package_name,
-                classes = classes,
-                subPackages = subPackages,
-                count = classes.size,
-            )
-        }
-    }
+            collectClasses(psiPackage)
 
-    private fun collectClasses(
-        pkg: com.intellij.psi.PsiPackage,
-        scope: GlobalSearchScope,
-        recursive: Boolean,
-        classes: MutableList<ClassEntry>,
-        subPackages: MutableList<String>,
-    ) {
-        for (cls in pkg.getClasses(scope)) {
-            val qn = cls.qualifiedName ?: continue
-            // Skip synthetic Kotlin classes and duplicates
-            if (qn.contains("$")) continue
-            if (classes.any { it.qualifiedName == qn }) continue
-            classes.add(ClassEntry(qualifiedName = qn, kind = classKind(cls)))
-        }
+            buildString {
+                append(package_name)
+                append(": ")
+                append(classes.size)
+                append(" class")
+                if (classes.size != 1) append("es")
+                if (subPackages.isNotEmpty()) {
+                    append(", ")
+                    append(subPackages.size)
+                    append(" sub-package")
+                    if (subPackages.size != 1) append("s")
+                }
+                append("\n")
 
-        for (sub in pkg.getSubPackages(scope)) {
-            val subName = sub.qualifiedName
-            if (subName in subPackages) continue
-            subPackages.add(subName)
-            if (recursive) {
-                collectClasses(sub, scope, true, classes, subPackages)
+                if (classes.isNotEmpty()) {
+                    append("\nClasses:\n")
+                    for (entry in classes) {
+                        append("  ")
+                        append(entry.kind)
+                        append(" ")
+                        append(entry.qualifiedName)
+                        append("\n")
+                    }
+                }
+
+                if (subPackages.isNotEmpty()) {
+                    append("\nSub-packages:\n")
+                    for (sub in subPackages) {
+                        append("  ")
+                        append(sub)
+                        append("\n")
+                    }
+                }
             }
         }
     }

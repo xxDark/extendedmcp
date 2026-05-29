@@ -15,8 +15,6 @@ import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.refactoring.changeSignature.ChangeSignatureProcessor
 import com.intellij.refactoring.changeSignature.ParameterInfoImpl
-import dev.xdark.ijmcp.util.formatLocation
-import dev.xdark.ijmcp.util.getContextText
 import dev.xdark.ijmcp.util.resolveFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -32,19 +30,6 @@ class ChangeSignatureToolset : McpToolset {
         val type: String,
         val oldIndex: Int = -1,
         val defaultValue: String = "",
-    )
-
-    @Serializable
-    data class AffectedCallSite(
-        val location: String,
-        val context: String,
-    )
-
-    @Serializable
-    data class ChangeSignatureResult(
-        val success: Boolean,
-        val affectedCallSites: List<AffectedCallSite>,
-        val message: String,
     )
 
     @McpTool
@@ -75,7 +60,7 @@ class ChangeSignatureToolset : McpToolset {
         @McpDescription("New visibility: public/protected/private/package (empty = keep current)") new_visibility: String = "",
         @McpDescription("JSON array of parameter specs (see description)") parameters: String,
         @McpDescription("Keep old method as a delegating overload (default false)") generate_delegate: Boolean = false,
-    ): ChangeSignatureResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, file_path)
 
@@ -139,17 +124,11 @@ class ChangeSignatureToolset : McpToolset {
             }
         }
 
-        // Collect call sites before refactoring
-        val callSitesBefore = readAction {
+        // Count call sites before refactoring
+        val callSiteCount = readAction {
             ReferencesSearch.search(method, GlobalSearchScope.projectScope(project))
                 .findAll()
-                .map { ref ->
-                    val element = ref.element
-                    AffectedCallSite(
-                        location = formatLocation(project, element),
-                        context = getContextText(element),
-                    )
-                }
+                .size
         }
 
         // Build ParameterInfoImpl array
@@ -217,10 +196,6 @@ class ChangeSignatureToolset : McpToolset {
             processor.run()
         }
 
-        return ChangeSignatureResult(
-            success = true,
-            affectedCallSites = callSitesBefore,
-            message = "Changed signature of '$method_name'. ${callSitesBefore.size} call site(s) updated.",
-        )
+        return "Changed signature of '$method_name'. $callSiteCount call site(s) updated."
     }
 }

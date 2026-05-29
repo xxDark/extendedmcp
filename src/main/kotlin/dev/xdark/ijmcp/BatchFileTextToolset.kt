@@ -12,22 +12,12 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.vfs.VirtualFile
 import dev.xdark.ijmcp.util.resolveFilesByPattern
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.serialization.Serializable
 
 class BatchFileTextToolset : McpToolset {
 
-    @Serializable
     data class FileContent(
         val file_path: String,
         val content: String,
-    )
-
-    @Serializable
-    data class BatchFileTextResult(
-        val files: List<FileContent>,
-        val filesRead: Int,
-        val filesSkipped: Int,
-        val hitMaxFiles: Boolean = false,
     )
 
     @McpTool
@@ -55,7 +45,7 @@ class BatchFileTextToolset : McpToolset {
         patterns: String,
         @McpDescription("Maximum total number of files to examine. Default 50.")
         max_files: Int = 50,
-    ): BatchFileTextResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val tokens = patterns.split(";").map { it.trim() }.filter { it.isNotEmpty() }
         if (tokens.isEmpty()) mcpFail("No patterns provided.")
@@ -98,12 +88,20 @@ class BatchFileTextToolset : McpToolset {
             }
         }
 
-        return BatchFileTextResult(
-            files = files,
-            filesRead = files.size,
-            filesSkipped = skipped,
-            hitMaxFiles = hitMax,
-        )
+        if (files.isEmpty()) {
+            return "No files read ($skipped skipped)"
+        }
+
+        return buildString {
+            for (fc in files) {
+                appendLine("=== ${fc.file_path} ===")
+                appendLine(fc.content)
+                appendLine()
+            }
+            append("Read ${files.size} files")
+            if (skipped > 0) append(" ($skipped skipped)")
+            if (hitMax) append(" (max files cap reached)")
+        }
     }
 
     private suspend fun readContent(vf: VirtualFile): String? {

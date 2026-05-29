@@ -18,18 +18,10 @@ import dev.xdark.ijmcp.util.resolvePsi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
 import org.jetbrains.kotlin.idea.base.codeInsight.ShortenReferencesFacility
 import org.jetbrains.kotlin.psi.KtFile
 
 class ShortenReferencesToolset : McpToolset {
-
-    @Serializable
-    data class ShortenReferencesResult(
-        val filesProcessed: Int,
-        val filesChanged: Int,
-        val message: String,
-    )
 
     @McpTool
     @McpDescription(
@@ -46,12 +38,12 @@ class ShortenReferencesToolset : McpToolset {
     )
     suspend fun shorten_references(
         @McpDescription("Path relative to project root, or glob pattern (e.g. 'src/**/*.java')") file_path: String,
-    ): ShortenReferencesResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val psiFiles = resolveFilesByPattern(project, file_path, extensions = setOf("java", "kt")).resolvePsi(project)
 
         if (psiFiles.isEmpty()) {
-            return ShortenReferencesResult(0, 0, "No Java/Kotlin files match '$file_path'")
+            return "No Java/Kotlin files match '$file_path'"
         }
 
         val textsBefore = readAction {
@@ -91,11 +83,7 @@ class ShortenReferencesToolset : McpToolset {
             }
         }
 
-        return ShortenReferencesResult(
-            filesProcessed = psiFiles.size,
-            filesChanged = changedFiles.size,
-            message = message.trimEnd()
-        )
+        return message.trimEnd()
     }
 
     private fun shortenFile(project: Project, psiFile: PsiFile) {

@@ -19,7 +19,6 @@ import com.intellij.openapi.externalSystem.model.execution.ExternalSystemTaskExe
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil
 import com.intellij.openapi.util.Key
 import kotlinx.coroutines.*
-import kotlinx.serialization.Serializable
 import org.jetbrains.plugins.gradle.util.GradleConstants
 
 class GradleToolset : McpToolset {
@@ -50,14 +49,6 @@ class GradleToolset : McpToolset {
         return NOISY_LINE.containsMatchIn(trimmed)
     }
 
-    @Serializable
-    data class GradleTaskResult(
-        val exitCode: Int? = null,
-        val success: Boolean,
-        val output: String,
-        val timedOut: Boolean = false,
-    )
-
     @McpTool
     @McpDescription("""
         |Executes a Gradle task in the current project.
@@ -76,7 +67,7 @@ class GradleToolset : McpToolset {
         @McpDescription("Additional command-line arguments (e.g. '--info', '--tests com.example.MyTest')") arguments: String = "",
         @McpDescription("Timeout in milliseconds (default 120000)") timeout: Int = 120000,
         @McpDescription("If true (default), only prints 'BUILD SUCCESSFUL in Xs' on success. Full output on failure.") compact: Boolean = true,
-    ): GradleTaskResult {
+    ): Any {
         val project = currentCoroutineContext().project
 
         val projectPath = project.basePath ?: mcpFail("Cannot determine project path")
@@ -149,16 +140,12 @@ class GradleToolset : McpToolset {
 
         val output = outputBuilder.toString()
         val success = exitCode == 0
-        val displayOutput = if (compact && success) {
+        return if (exitCode == null) {
+            "Gradle task timed out after ${timeout}ms.\n$output"
+        } else if (compact && success) {
             "BUILD SUCCESSFUL"
         } else {
             output
         }
-        return GradleTaskResult(
-            exitCode = exitCode,
-            success = success,
-            output = displayOutput,
-            timedOut = exitCode == null,
-        )
     }
 }

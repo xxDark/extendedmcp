@@ -31,11 +31,9 @@ import dev.xdark.ijmcp.util.resolveFilesByPattern
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.serialization.Serializable
 
 class BatchProblemsToolset : McpToolset {
 
-    @Serializable
     data class Problem(
         val severity: String,
         val description: String,
@@ -44,18 +42,9 @@ class BatchProblemsToolset : McpToolset {
         val lineContent: String,
     )
 
-    @Serializable
     data class FileProblems(
         val file_path: String,
         val problems: List<Problem>,
-    )
-
-    @Serializable
-    data class BatchFileProblemsResult(
-        val files: List<FileProblems>,
-        val totalProblems: Int,
-        val filesAnalyzed: Int,
-        val timedOut: Boolean = false,
     )
 
     @McpTool
@@ -77,7 +66,7 @@ class BatchProblemsToolset : McpToolset {
         errors_only: Boolean = true,
         @McpDescription("Total timeout in milliseconds")
         timeout: Int = 30000,
-    ): BatchFileProblemsResult {
+    ): Any {
         val project = currentCoroutineContext().project
 
         val entries: List<ResolvedFileEntry> = if (file_paths.isNotBlank()) {
@@ -110,12 +99,27 @@ class BatchProblemsToolset : McpToolset {
 
         val totalProblems = results.sumOf { it.problems.size }
 
-        return BatchFileProblemsResult(
-            files = results,
-            totalProblems = totalProblems,
-            filesAnalyzed = filesAnalyzed,
-            timedOut = timedOut,
-        )
+        if (totalProblems == 0) {
+            return buildString {
+                append("No problems found ($filesAnalyzed files analyzed)")
+                if (timedOut) append(" (timed out)")
+            }
+        }
+
+        return buildString {
+            append("Analyzed $filesAnalyzed files, $totalProblems problems found")
+            if (timedOut) append(" (timed out)")
+            appendLine(":")
+            appendLine()
+            for (fp in results) {
+                appendLine("${fp.file_path}:")
+                for (p in fp.problems) {
+                    appendLine("  ${p.line}:${p.column} ${p.severity}: ${p.description}")
+                    appendLine("    ${p.lineContent}")
+                }
+                appendLine()
+            }
+        }.trimEnd()
     }
 
     private suspend fun resolvePatterns(project: Project, file_paths: String): List<ResolvedFileEntry> {

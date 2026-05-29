@@ -10,56 +10,57 @@ import com.intellij.openapi.application.readAction
 import com.intellij.openapi.roots.OrderEnumerator
 import com.intellij.openapi.roots.OrderRootType
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.serialization.Serializable
 
 class LibrarySourcesToolset : McpToolset {
 
-    @Serializable
-    data class LibraryInfo(
-        val name: String,
-        val hasSources: Boolean,
-    )
-
-    @Serializable
-    data class LibrarySourcesResult(
-        val totalLibraries: Int,
-        val withSources: Int,
-        val withoutSources: Int,
-        val missingSourcesList: List<String>,
-    )
-
     @McpTool
-    @McpDescription("""
+    @McpDescription(
+        """
         |Checks which project libraries have their sources downloaded.
         |
         |Libraries without sources limit IDE features like "Find Implementations" and "Go to Source".
         |If many libraries are missing sources, ask the user to download them:
         |  - Gradle: Settings > Build > Build Tools > Gradle > check "Download sources"
         |  - Or right-click a dependency in the Project view > Download Sources
-    """)
-    suspend fun check_library_sources(): LibrarySourcesResult {
+    """
+    )
+    suspend fun check_library_sources(): Any {
         val project = currentCoroutineContext().project
 
         return readAction {
-            val withSources = mutableListOf<String>()
-            val withoutSources = mutableListOf<String>()
+            val withSourcesCount = intArrayOf(0)
+            val withoutSourceNames = mutableListOf<String>()
 
             OrderEnumerator.orderEntries(project).forEachLibrary { library ->
                 val name = library.name ?: "unknown"
                 if (library.getFiles(OrderRootType.SOURCES).isNotEmpty()) {
-                    withSources.add(name)
+                    withSourcesCount[0]++
                 } else {
-                    withoutSources.add(name)
+                    withoutSourceNames.add(name)
                 }
                 true
             }
 
-            LibrarySourcesResult(
-                totalLibraries = withSources.size + withoutSources.size,
-                withSources = withSources.size,
-                withoutSources = withoutSources.size,
-                missingSourcesList = withoutSources,
-            )
+            val total = withSourcesCount[0] + withoutSourceNames.size
+
+            buildString {
+                append("Library sources summary: ")
+                append(total)
+                append(" total, ")
+                append(withSourcesCount[0])
+                append(" with sources, ")
+                append(withoutSourceNames.size)
+                append(" without sources\n")
+
+                if (withoutSourceNames.isNotEmpty()) {
+                    append("\nMissing sources:\n")
+                    for (name in withoutSourceNames) {
+                        append("  ")
+                        append(name)
+                        append("\n")
+                    }
+                }
+            }
         }
     }
 }

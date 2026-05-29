@@ -42,7 +42,7 @@ class MoveClassToolset : McpToolset {
         @McpDescription("Fully qualified target package name (e.g. 'com.example.util')") target_package: String,
         @McpDescription("Update references in comments and strings (default true)") search_in_comments: Boolean = true,
         @McpDescription("Update references in non-Java/Kotlin files (default true)") search_in_non_java_files: Boolean = true,
-    ): String {
+    ): Any {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, file_path)
 

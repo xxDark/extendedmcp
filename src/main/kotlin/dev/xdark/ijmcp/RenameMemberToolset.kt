@@ -19,14 +19,11 @@ import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.refactoring.rename.RenameProcessor
 import com.intellij.refactoring.rename.RenameUtil
-import dev.xdark.ijmcp.util.formatLocation
-import dev.xdark.ijmcp.util.getContextText
 import dev.xdark.ijmcp.util.resolveFile
 import dev.xdark.ijmcp.util.resolveTargetElement
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
 import org.jetbrains.kotlin.asJava.toLightClass
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtNamedFunction
@@ -34,20 +31,6 @@ import org.jetbrains.kotlin.psi.KtProperty
 
 class RenameMemberToolset : McpToolset {
 
-    @Serializable
-    data class AffectedUsage(
-        val location: String,
-        val context: String,
-    )
-
-    @Serializable
-    data class RenameMemberResult(
-        val renamed: Boolean,
-        val oldName: String,
-        val new_name: String,
-        val affectedUsages: List<AffectedUsage>,
-        val message: String,
-    )
 
     @McpTool
     @McpDescription(
@@ -66,7 +49,7 @@ class RenameMemberToolset : McpToolset {
         @McpDescription("New name for the member") new_name: String,
         @McpDescription("Search in comments and strings (default true)") search_in_comments: Boolean = true,
         @McpDescription("Search in non-Java/Kotlin files (default false)") search_in_non_java_files: Boolean = false,
-    ): RenameMemberResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, file_path)
         val element = resolveTargetElement(resolved, symbol_name, line, column)
@@ -151,16 +134,11 @@ class RenameMemberToolset : McpToolset {
             }
         }
 
-        // Collect usages before renaming (for reporting)
-        val usagesBefore = readAction {
+        // Count usages before renaming (for reporting)
+        val usageCount = readAction {
             ReferencesSearch.search(element, GlobalSearchScope.projectScope(project))
                 .findAll()
-                .map { ref ->
-                    AffectedUsage(
-                        location = formatLocation(project, ref.element),
-                        context = getContextText(ref.element),
-                    )
-                }
+                .size
         }
 
         // Run rename refactoring — BaseRefactoringProcessor.run() manages its own write actions
@@ -179,12 +157,6 @@ class RenameMemberToolset : McpToolset {
             FileDocumentManager.getInstance().saveAllDocuments()
         }
 
-        return RenameMemberResult(
-            renamed = true,
-            oldName = oldName,
-            new_name = new_name,
-            affectedUsages = usagesBefore,
-            message = "Renamed '$oldName' to '$new_name'. ${usagesBefore.size} usage(s) updated.",
-        )
+        return "Renamed '$oldName' to '$new_name'. $usageCount usage(s) updated."
     }
 }

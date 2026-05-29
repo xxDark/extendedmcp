@@ -37,7 +37,7 @@ class CreateFileToolset : McpToolset {
         content: String,
         @McpDescription("Whether to overwrite an existing file. If false, an error is returned if the file exists.")
         overwrite: Boolean = false,
-    ) {
+    ): Any {
         val project = currentCoroutineContext().project
         val path = project.resolveInProject(path_in_project)
         try {
@@ -56,5 +56,6 @@ class CreateFileToolset : McpToolset {
         } catch (e: IOException) {
             mcpFail("Cannot create file $path_in_project: ${e.message}")
         }
+        return "Created file $path_in_project"
     }
 }

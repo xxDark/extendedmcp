@@ -15,15 +15,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
-
 class ReformatToolset : McpToolset {
-
-    @Serializable
-    data class ReformatResult(
-        val filesProcessed: Int,
-        val message: String,
-    )
 
     @McpTool
     @McpDescription(
@@ -36,7 +28,7 @@ class ReformatToolset : McpToolset {
     )
     suspend fun reformat_files(
         @McpDescription("Path relative to project root, or glob pattern (e.g. 'src/**/*.kt')") file_path: String,
-    ): ReformatResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val psiFiles = resolveFilesByPattern(project, file_path).resolvePsi(project)
 
@@ -57,10 +49,7 @@ class ReformatToolset : McpToolset {
         }
         finished.await()
 
-        return ReformatResult(
-            filesProcessed = psiFiles.size,
-            message = if (psiFiles.size == 1) "Reformatted ${psiFiles[0].relativePath}"
+        return if (psiFiles.size == 1) "Reformatted ${psiFiles[0].relativePath}"
             else "Reformatted ${psiFiles.size} files"
-        )
     }
 }

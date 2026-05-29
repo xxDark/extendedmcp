@@ -16,30 +16,25 @@ import com.intellij.psi.PsiElement
 import com.intellij.util.DocumentUtil
 import dev.xdark.ijmcp.util.resolveFile
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.serialization.Serializable
 
 class TypeInfoToolset : McpToolset {
 
-    @Serializable
-    data class TypeInfoResult(
-        val type: String?,
-        val expressionText: String,
-    )
-
     @McpTool
-    @McpDescription("""
+    @McpDescription(
+        """
         |Returns the inferred type of the expression at the specified position.
         |
         |This is the same as IntelliJ's "Expression Type" action (Ctrl+Shift+P).
         |Useful for understanding types in languages with type inference (Kotlin, Java var, etc.).
         |
         |Returns the type as a human-readable string and the expression text.
-    """)
+    """
+    )
     suspend fun get_type_info(
         @McpDescription("Path relative to the project root") file_path: String,
         @McpDescription("1-based line number") line: Int,
         @McpDescription("1-based column number") column: Int,
-    ): TypeInfoResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, file_path)
 
@@ -63,10 +58,15 @@ class TypeInfoToolset : McpToolset {
 
             val (typeText, exprText) = findExpressionType(elementAt)
 
-            TypeInfoResult(
-                type = typeText,
-                expressionText = exprText ?: elementAt.text,
-            )
+            val expression = exprText ?: elementAt.text
+
+            buildString {
+                append("Expression: ")
+                append(expression)
+                append("\n")
+                append("Type: ")
+                append(typeText ?: "unknown")
+            }
         }
     }
 

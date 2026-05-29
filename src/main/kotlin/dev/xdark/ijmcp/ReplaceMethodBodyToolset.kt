@@ -20,7 +20,6 @@ import dev.xdark.ijmcp.util.resolveFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNamedFunction
@@ -28,7 +27,6 @@ import org.jetbrains.kotlin.psi.KtPsiFactory
 
 class ReplaceMethodBodyToolset : McpToolset {
 
-    @Serializable
     data class ReplaceMethodBodyResult(
         val success: Boolean,
         val class_name: String,
@@ -62,7 +60,7 @@ class ReplaceMethodBodyToolset : McpToolset {
         @McpDescription("The new method body (including braces, or = for Kotlin expression body)") new_body: String,
         @McpDescription("Simple name of the target class (optional if file has one class)") class_name: String = "",
         @McpDescription("Index of the overloaded method (from the overload list error)") member_index: Int = -1,
-    ): ReplaceMethodBodyResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, file_path)
 
@@ -78,7 +76,7 @@ class ReplaceMethodBodyToolset : McpToolset {
             FileDocumentManager.getInstance().saveDocument(resolved.document)
         }
 
-        return result
+        return result.message
     }
 
     private suspend fun replaceJavaBody(

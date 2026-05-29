@@ -16,29 +16,12 @@ import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.refactoring.inline.InlineMethodProcessor
-import dev.xdark.ijmcp.util.formatLocation
-import dev.xdark.ijmcp.util.getContextText
 import dev.xdark.ijmcp.util.resolveFile
 import dev.xdark.ijmcp.util.resolveTargetElement
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
-
 class InlineToolset : McpToolset {
-
-    @Serializable
-    data class InlinedSite(
-        val location: String,
-        val context: String,
-    )
-
-    @Serializable
-    data class InlineResult(
-        val symbol_name: String,
-        val inlinedSites: List<InlinedSite>,
-        val message: String,
-    )
 
     @McpTool
     @McpDescription("""
@@ -53,7 +36,7 @@ class InlineToolset : McpToolset {
         @McpDescription("1-based line number (alternative to method_name)") line: Int = 0,
         @McpDescription("1-based column number (used with line)") column: Int = 0,
         @McpDescription("Delete the original method after inlining (default true)") delete_declaration: Boolean = true,
-    ): InlineResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, file_path)
 
@@ -68,19 +51,14 @@ class InlineToolset : McpToolset {
 
         val name = readAction { method.name }
 
-        // Collect call sites before inlining
-        val callSites = readAction {
+        // Count call sites before inlining
+        val callSiteCount = readAction {
             ReferencesSearch.search(method, GlobalSearchScope.projectScope(project))
                 .findAll()
-                .map { ref ->
-                    InlinedSite(
-                        location = formatLocation(project, ref.element),
-                        context = getContextText(ref.element),
-                    )
-                }
+                .size
         }
 
-        if (callSites.isEmpty()) {
+        if (callSiteCount == 0) {
             mcpFail("Method '$name' has no call sites to inline.")
         }
 
@@ -107,11 +85,7 @@ class InlineToolset : McpToolset {
             FileDocumentManager.getInstance().saveDocument(resolved.document)
         }
 
-        return InlineResult(
-            symbol_name = name,
-            inlinedSites = callSites,
-            message = "Inlined '$name' at ${callSites.size} call site(s)." +
-                if (delete_declaration) " Declaration removed." else "",
-        )
+        return "Inlined '$name' at $callSiteCount call site(s)." +
+            if (delete_declaration) " Declaration removed." else ""
     }
 }

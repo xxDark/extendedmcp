@@ -27,28 +27,18 @@ import com.intellij.util.Processor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
 import java.nio.file.Files
 import java.util.Collections
 import java.util.concurrent.atomic.AtomicBoolean
 
 class FindInFilesToolset : McpToolset {
 
-    @Serializable
     data class MatchLocation(
         val file: String,
         val line: Int,
         val column: Int,
         val match: String,
         val context: String,
-    )
-
-    @Serializable
-    data class FindInFilesResult(
-        val search_text: String,
-        val matches: List<MatchLocation>,
-        val count: Int,
-        val truncated: Boolean = false,
     )
 
     @McpTool
@@ -72,7 +62,7 @@ class FindInFilesToolset : McpToolset {
         @McpDescription("Search scope: 'project' (default) or 'all' (includes libraries)") scope: String = "project",
         @McpDescription("Where to search: 'any', 'inComments', 'inStrings', 'exceptComments', 'exceptStrings', 'exceptBoth'") context: String = "any",
         @McpDescription("Maximum number of matches to return (default 100)") max_results: Int = 100,
-    ): FindInFilesResult {
+    ): Any {
         val project = currentCoroutineContext().project
 
         if (search_text.isEmpty()) {
@@ -163,12 +153,23 @@ class FindInFilesToolset : McpToolset {
             }, EmptyProgressIndicator())
         }
 
-        return FindInFilesResult(
-            search_text = search_text,
-            matches = matches,
-            count = matches.size,
-            truncated = truncated.get(),
-        )
+        if (matches.isEmpty()) {
+            return "No matches found for '$search_text'"
+        }
+
+        val truncatedFlag = truncated.get()
+        return buildString {
+            appendLine("${matches.size} matches for '$search_text'${if (truncatedFlag) " (truncated)" else ""}:")
+            appendLine()
+            val byFile = matches.groupBy { it.file }
+            for ((file, fileMatches) in byFile) {
+                appendLine(file)
+                for (m in fileMatches) {
+                    appendLine("  ${m.line}:${m.column} ${m.context}")
+                }
+                appendLine()
+            }
+        }.trimEnd()
     }
 
     private fun extractMatch(project: Project, usageInfo: UsageInfo): MatchLocation? {

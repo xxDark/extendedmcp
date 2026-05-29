@@ -16,41 +16,29 @@ import com.intellij.util.DocumentUtil
 import dev.xdark.ijmcp.util.formatLocation
 import dev.xdark.ijmcp.util.resolveFile
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.serialization.Serializable
 
 class GoToDeclarationToolset : McpToolset {
 
-    @Serializable
-    data class DeclarationTarget(
-        val name: String,
-        val location: String,
-        val language: String,
-        val snippet: String,
-    )
-
-    @Serializable
-    data class GoToDeclarationResult(
-        val targets: List<DeclarationTarget>,
-    )
-
     @McpTool
-    @McpDescription("""
+    @McpDescription(
+        """
         |Navigates to the declaration of the symbol at the given position.
         |Returns the declaration's file location and a code snippet around it.
         |This is the same as Ctrl+Click / Go to Declaration in the IDE.
         |
         |Useful for quickly understanding what a symbol is without reading the whole file.
-    """)
+    """
+    )
     suspend fun go_to_declaration(
         @McpDescription("Path relative to the project root") file_path: String,
         @McpDescription("1-based line number") line: Int,
         @McpDescription("1-based column number") column: Int,
         @McpDescription("Number of context lines around the declaration (default 5)") context_lines: Int = 5,
-    ): GoToDeclarationResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, file_path)
 
-        val targets = readAction {
+        val result = readAction {
             val document = resolved.document
             if (!DocumentUtil.isValidLine(line - 1, document)) {
                 mcpFail("Line $line is out of bounds")
@@ -72,17 +60,30 @@ class GoToDeclarationToolset : McpToolset {
                 val loc = formatLocation(project, resolvedElement)
                 val snippet = getSnippet(resolvedElement, context_lines)
                 val lang = resolvedElement.navigationElement.language.displayName
-                listOf(DeclarationTarget(name, loc, lang, snippet))
+
+                buildString {
+                    append(name)
+                    append(" (")
+                    append(lang)
+                    append(")\n")
+                    append(loc)
+                    append("\n")
+                    if (snippet.isNotEmpty()) {
+                        append("\n")
+                        append(snippet)
+                        append("\n")
+                    }
+                }
             } else {
-                emptyList()
+                null
             }
         }
 
-        if (targets.isEmpty()) {
+        if (result == null) {
             mcpFail("No declaration found at $line:$column")
         }
 
-        return GoToDeclarationResult(targets = targets)
+        return result
     }
 
     private fun getSnippet(element: PsiElement, context_lines: Int): String {

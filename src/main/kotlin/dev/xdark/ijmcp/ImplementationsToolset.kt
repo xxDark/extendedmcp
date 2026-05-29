@@ -17,30 +17,12 @@ import dev.xdark.ijmcp.util.getContextText
 import dev.xdark.ijmcp.util.resolveFile
 import dev.xdark.ijmcp.util.resolveTargetElement
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.serialization.Serializable
-import com.intellij.psi.search.PsiShortNamesCache
 
 class ImplementationsToolset : McpToolset {
 
-    @Serializable
-    data class ImplementationInfo(
-        val name: String,
-        val file: String,
-        val line: Int,
-        val column: Int,
-        val context: String,
-    )
-
-    @Serializable
-    data class GetImplementationsResult(
-        val symbol_name: String,
-        val declarationLocation: String,
-        val implementations: List<ImplementationInfo>,
-        val count: Int,
-    )
-
     @McpTool
-    @McpDescription("""
+    @McpDescription(
+        """
         |Finds all implementations of an interface, abstract class, or overrides of a method.
         |
         |For an interface/abstract class: returns all implementing/extending classes.
@@ -50,7 +32,8 @@ class ImplementationsToolset : McpToolset {
         |  1. class_name — fully qualified name (e.g. "java.util.List"). Works for library/JDK classes.
         |  2. file_path + symbol_name — find symbol by name in a project file.
         |  3. file_path + line + column — find symbol at a specific position.
-    """)
+    """
+    )
     suspend fun get_implementations(
         @McpDescription("Path relative to the project root (not needed when using class_name)") file_path: String = "",
         @McpDescription("Name of the symbol. Alternative to line+column.") symbol_name: String = "",
@@ -58,7 +41,7 @@ class ImplementationsToolset : McpToolset {
         @McpDescription("1-based column number. Used with line.") column: Int = 0,
         @McpDescription("Fully qualified class name (e.g. 'java.util.List'). Works for library/JDK classes.") class_name: String = "",
         @McpDescription("Search scope: 'project' (default) or 'all' (includes libraries)") scope: String = "project",
-    ): GetImplementationsResult {
+    ): Any {
         val project = currentCoroutineContext().project
 
         val targetElement = if (class_name.isNotEmpty()) {
@@ -107,40 +90,37 @@ class ImplementationsToolset : McpToolset {
             DefinitionsScopedSearch.search(targetElement, searchScope).findAll()
         }
 
+        data class ImplEntry(val name: String, val location: String, val context: String)
+
         val seen = mutableSetOf<String>()
         val implementations = readAction {
             definitions.mapNotNull { element ->
                 val name = (element as? PsiNamedElement)?.name ?: return@mapNotNull null
                 val loc = formatLocation(project, element)
                 if (!seen.add(loc)) return@mapNotNull null // deduplicate
-                if (loc.endsWith("(library)")) {
-                    ImplementationInfo(
-                        name = name,
-                        file = loc,
-                        line = 0,
-                        column = 0,
-                        context = getContextText(element),
-                    )
-                } else {
-                    val parts = loc.split(":")
-                    if (parts.size >= 3) {
-                        ImplementationInfo(
-                            name = name,
-                            file = parts[0],
-                            line = parts[1].toIntOrNull() ?: 0,
-                            column = parts[2].toIntOrNull() ?: 0,
-                            context = getContextText(element),
-                        )
-                    } else null
-                }
+                val context = getContextText(element)
+                ImplEntry(name, loc, context)
             }
         }
 
-        return GetImplementationsResult(
-            symbol_name = resolvedName,
-            declarationLocation = declarationLocation,
-            implementations = implementations,
-            count = implementations.size,
-        )
+        return buildString {
+            val count = implementations.size
+            append(count)
+            append(" implementation")
+            if (count != 1) append("s")
+            append(" of ")
+            append(resolvedName)
+            append(" (declared at ")
+            append(declarationLocation)
+            append("):\n")
+
+            for (impl in implementations) {
+                append("\n")
+                append(impl.location)
+                append("\n  ")
+                append(impl.context)
+                append("\n")
+            }
+        }
     }
 }

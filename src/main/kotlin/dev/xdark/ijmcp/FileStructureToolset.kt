@@ -13,25 +13,9 @@ import com.intellij.psi.PsiClassOwner
 import com.intellij.psi.PsiElement
 import dev.xdark.ijmcp.util.resolveFile
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.serialization.Serializable
 import org.jetbrains.kotlin.psi.*
 
 class FileStructureToolset : McpToolset {
-
-    @Serializable
-    data class StructureEntry(
-        val kind: String,
-        val name: String,
-        val line: Int,
-        val signature: String = "",
-        val children: List<StructureEntry> = emptyList(),
-    )
-
-    @Serializable
-    data class FileStructureResult(
-        val file_path: String,
-        val entries: List<StructureEntry>,
-    )
 
     @McpTool
     @McpDescription(
@@ -45,22 +29,28 @@ class FileStructureToolset : McpToolset {
     )
     suspend fun get_file_outline(
         @McpDescription("Path relative to the project root") file_path: String,
-    ): FileStructureResult {
+    ): Any {
         val project = currentCoroutineContext().project
         val resolved = resolveFile(project, file_path)
 
-        val entries = readAction {
+        return readAction {
             val document = resolved.document
             val psiFile = resolved.psiFile
-            if (psiFile is KtFile) {
-                psiFile.declarations.mapNotNull { buildKtEntry(it, document) }
+            val entries = if (psiFile is KtFile) {
+                psiFile.declarations.mapNotNull { buildKtEntry(it, document, 0) }
             } else {
                 val classes = (psiFile as? PsiClassOwner)?.classes ?: emptyArray()
-                classes.map { cls -> buildClassEntry(cls, document) }
+                classes.map { cls -> buildClassEntry(cls, document, 0) }
+            }
+
+            buildString {
+                append(file_path)
+                append(":\n")
+                for (entry in entries) {
+                    append(entry)
+                }
             }
         }
-
-        return FileStructureResult(file_path = file_path, entries = entries)
     }
 
     private fun lineOf(element: PsiElement, document: Document): Int {
@@ -83,59 +73,10 @@ class FileStructureToolset : McpToolset {
         return name == "Companion" || name.startsWith("$")
     }
 
-    private fun buildClassEntry(cls: PsiClass, document: Document): StructureEntry {
-        val children = mutableListOf<StructureEntry>()
+    private fun indent(depth: Int): String = "  ".repeat(depth + 1)
 
-        for (field in cls.fields) {
-            // Skip synthetic fields (serialization, companion INSTANCE)
-            if (field.name == "INSTANCE" || field.name.startsWith("$")) continue
-            val typeName = try {
-                field.type.presentableText
-            } catch (_: Exception) {
-                "?"
-            }
-            children.add(
-                StructureEntry(
-                    kind = "field",
-                    name = field.name,
-                    line = lineOf(field, document),
-                    signature = "$typeName ${field.name}",
-                )
-            )
-        }
-
-        for (method in cls.methods) {
-            // Skip Kotlin synthetic methods (componentN, copy, getters/setters, etc.)
-            if (isSynthetic(method.name)) continue
-            val params = method.parameterList.parameters
-                .filter { it.name != "\$completion" } // Filter Kotlin continuation param
-                .joinToString(", ") {
-                    val typeName = try {
-                        it.type.presentableText
-                    } catch (_: Exception) {
-                        "?"
-                    }
-                    "$typeName ${it.name}"
-                }
-            val returnType = try {
-                method.returnType?.presentableText ?: "void"
-            } catch (_: Exception) {
-                "?"
-            }
-            children.add(
-                StructureEntry(
-                    kind = if (method.isConstructor) "constructor" else "method",
-                    name = method.name,
-                    line = lineOf(method, document),
-                    signature = "$returnType ${method.name}($params)",
-                )
-            )
-        }
-
-        for (inner in cls.innerClasses) {
-            if (isSyntheticClass(inner)) continue
-            children.add(buildClassEntry(inner, document))
-        }
+    private fun buildClassEntry(cls: PsiClass, document: Document, depth: Int): String {
+        val prefix = indent(depth)
 
         val kind = when {
             cls.isInterface -> "interface"
@@ -144,69 +85,89 @@ class FileStructureToolset : McpToolset {
             else -> "class"
         }
 
-        return StructureEntry(
-            kind = kind,
-            name = cls.name ?: "<anonymous>",
-            line = lineOf(cls, document),
-            signature = cls.qualifiedName ?: cls.name ?: "",
-            children = children,
-        )
+        return buildString {
+            append(prefix)
+            append("$kind ${cls.name ?: "<anonymous>"}")
+            append(" [line ${lineOf(cls, document)}]")
+            append("\n")
+
+            // Fields
+            for (field in cls.fields) {
+                if (field.name == "INSTANCE" || field.name.startsWith("$")) continue
+                val typeName = try {
+                    field.type.presentableText
+                } catch (_: Exception) {
+                    "?"
+                }
+                append(prefix)
+                append("  $typeName ${field.name}")
+                append(" [line ${lineOf(field, document)}]")
+                append("\n")
+            }
+
+            // Methods
+            for (method in cls.methods) {
+                if (isSynthetic(method.name)) continue
+                val params = method.parameterList.parameters
+                    .filter { it.name != "\$completion" }
+                    .joinToString(", ") {
+                        val typeName = try {
+                            it.type.presentableText
+                        } catch (_: Exception) {
+                            "?"
+                        }
+                        "$typeName ${it.name}"
+                    }
+                val returnType = try {
+                    method.returnType?.presentableText ?: "void"
+                } catch (_: Exception) {
+                    "?"
+                }
+                val label = if (method.isConstructor) "constructor" else "$returnType"
+                append(prefix)
+                append("  $label ${method.name}($params)")
+                append(" [line ${lineOf(method, document)}]")
+                append("\n")
+            }
+
+            // Inner classes
+            for (inner in cls.innerClasses) {
+                if (isSyntheticClass(inner)) continue
+                append(buildClassEntry(inner, document, depth + 1))
+            }
+        }
     }
 
-    private fun buildKtEntry(declaration: KtDeclaration, document: Document): StructureEntry? {
+    private fun buildKtEntry(declaration: KtDeclaration, document: Document, depth: Int): String? {
         return when (declaration) {
             is KtEnumEntry -> null
-            is KtClassOrObject -> buildKtClassEntry(declaration, document)
-            is KtNamedFunction -> buildKtFunctionEntry(declaration, document)
-            is KtProperty -> buildKtPropertyEntry(declaration, document)
+            is KtClassOrObject -> buildKtClassEntry(declaration, document, depth)
+            is KtNamedFunction -> buildKtFunctionEntry(declaration, document, depth)
+            is KtProperty -> buildKtPropertyEntry(declaration, document, depth)
             is KtSecondaryConstructor -> {
+                val prefix = indent(depth)
                 val params = declaration.valueParameters.joinToString(", ") { p ->
                     "${p.name}: ${p.typeReference?.text ?: "?"}"
                 }
-                StructureEntry(
-                    kind = "constructor",
-                    name = "constructor",
-                    line = lineOf(declaration, document),
-                    signature = "constructor($params)",
-                )
+                "${prefix}constructor($params) [line ${lineOf(declaration, document)}]\n"
             }
 
-            is KtTypeAlias -> StructureEntry(
-                kind = "typealias",
-                name = declaration.name ?: "<unnamed>",
-                line = lineOf(declaration, document),
-                signature = "typealias ${declaration.name} = ${declaration.getTypeReference()?.text ?: "?"}",
-            )
+            is KtTypeAlias -> {
+                val prefix = indent(depth)
+                "${prefix}typealias ${declaration.name} = ${declaration.getTypeReference()?.text ?: "?"} [line ${
+                    lineOf(
+                        declaration,
+                        document
+                    )
+                }]\n"
+            }
 
             else -> null
         }
     }
 
-    private fun buildKtClassEntry(cls: KtClassOrObject, document: Document): StructureEntry {
-        val children = mutableListOf<StructureEntry>()
-
-        cls.primaryConstructor?.let { ctor ->
-            val params = ctor.valueParameters.joinToString(", ") { p ->
-                val prefix = when (p.valOrVarKeyword?.text) {
-                    "var" -> "var "
-                    "val" -> "val "
-                    else -> ""
-                }
-                "$prefix${p.name}: ${p.typeReference?.text ?: "?"}"
-            }
-            children.add(
-                StructureEntry(
-                    kind = "constructor",
-                    name = cls.name ?: "<init>",
-                    line = lineOf(ctor, document),
-                    signature = "constructor($params)",
-                )
-            )
-        }
-
-        cls.body?.declarations?.forEach { decl ->
-            buildKtEntry(decl, document)?.let { children.add(it) }
-        }
+    private fun buildKtClassEntry(cls: KtClassOrObject, document: Document, depth: Int): String {
+        val prefix = indent(depth)
 
         val kind = when {
             cls is KtObjectDeclaration && cls.isCompanion() -> "companion object"
@@ -217,16 +178,35 @@ class FileStructureToolset : McpToolset {
             else -> "class"
         }
 
-        return StructureEntry(
-            kind = kind,
-            name = cls.name ?: "<anonymous>",
-            line = lineOf(cls, document),
-            signature = cls.fqName?.asString() ?: cls.name ?: "",
-            children = children,
-        )
+        return buildString {
+            append(prefix)
+            append("$kind ${cls.name ?: "<anonymous>"}")
+            append(" [line ${lineOf(cls, document)}]")
+            append("\n")
+
+            cls.primaryConstructor?.let { ctor ->
+                val params = ctor.valueParameters.joinToString(", ") { p ->
+                    val valVar = when (p.valOrVarKeyword?.text) {
+                        "var" -> "var "
+                        "val" -> "val "
+                        else -> ""
+                    }
+                    "$valVar${p.name}: ${p.typeReference?.text ?: "?"}"
+                }
+                append(prefix)
+                append("  constructor($params)")
+                append(" [line ${lineOf(ctor, document)}]")
+                append("\n")
+            }
+
+            cls.body?.declarations?.forEach { decl ->
+                buildKtEntry(decl, document, depth + 1)?.let { append(it) }
+            }
+        }
     }
 
-    private fun buildKtFunctionEntry(function: KtNamedFunction, document: Document): StructureEntry {
+    private fun buildKtFunctionEntry(function: KtNamedFunction, document: Document, depth: Int): String {
+        val prefix = indent(depth)
         val params = function.valueParameters.joinToString(", ") { p ->
             "${p.name}: ${p.typeReference?.text ?: "?"}"
         }
@@ -235,26 +215,17 @@ class FileStructureToolset : McpToolset {
             append("fun ${function.name}($params)")
             if (returnType != null) append(": $returnType")
         }
-        return StructureEntry(
-            kind = "function",
-            name = function.name ?: "<anonymous>",
-            line = lineOf(function, document),
-            signature = sig,
-        )
+        return "${prefix}$sig [line ${lineOf(function, document)}]\n"
     }
 
-    private fun buildKtPropertyEntry(property: KtProperty, document: Document): StructureEntry {
+    private fun buildKtPropertyEntry(property: KtProperty, document: Document, depth: Int): String {
+        val prefix = indent(depth)
         val typeText = property.typeReference?.text
         val keyword = if (property.isVar) "var" else "val"
         val sig = buildString {
             append("$keyword ${property.name}")
             if (typeText != null) append(": $typeText")
         }
-        return StructureEntry(
-            kind = "property",
-            name = property.name ?: "<unnamed>",
-            line = lineOf(property, document),
-            signature = sig,
-        )
+        return "${prefix}$sig [line ${lineOf(property, document)}]\n"
     }
 }
