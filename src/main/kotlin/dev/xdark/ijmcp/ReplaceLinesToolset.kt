@@ -40,6 +40,14 @@ class ReplaceLinesToolset : McpToolset {
         |The text content of those lines is replaced with new_text.
         |If new_text is empty, the lines are deleted.
         |Returns a few lines of context around the replacement for verification.
+        |
+        |IMPORTANT — boundary alignment:
+        |  Your new_text must cover EXACTLY the content of lines start_line..end_line.
+        |  - First line of new_text replaces start_line
+        |  - Last line of new_text replaces end_line
+        |  Do NOT include content from the line BEFORE start_line or AFTER end_line.
+        |  Verify: compare the first/last line of your new_text against start_line/end_line in the file.
+        |  Common mistake: including the closing brace/paren from end_line+1 in new_text.
     """
     )
     suspend fun replace_lines(
@@ -95,6 +103,14 @@ class ReplaceLinesToolset : McpToolset {
         |Each replacement has: file_path, start_line, end_line, new_text (all 1-based, inclusive).
         |Ranges within the same file must not overlap.
         |Replacements are applied bottom-to-top per file so line numbers stay stable.
+        |
+        |IMPORTANT — boundary alignment:
+        |  Your new_text for each replacement must cover EXACTLY lines start_line..end_line.
+        |  - First line of new_text replaces start_line
+        |  - Last line of new_text replaces end_line
+        |  Do NOT include content from the line BEFORE start_line or AFTER end_line.
+        |  Verify: compare the first/last line of your new_text against start_line/end_line in the file.
+        |  Common mistake: including the closing brace/paren from end_line+1 in new_text.
     """
     )
     suspend fun batch_replace_lines(

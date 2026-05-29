@@ -53,15 +53,15 @@ class BatchProblemsToolset : McpToolset {
         |Analyzes files for errors and warnings using IntelliJ's inspections.
         |Batch version of get_file_problems — saves tokens by checking many files in one call.
         |
-        |file_paths accepts semicolon-separated file paths or glob patterns (e.g. "src/**/*.java").
+        |file_paths accepts a list of file paths or glob patterns (e.g. "src/**/*.java").
         |Leave empty to check all open editor files.
         |Files with no problems are omitted from the results.
         |Note: Lines and Columns are 1-based.
     """
     )
     suspend fun get_file_problems(
-        @McpDescription("Semicolon-separated file paths or glob patterns. Empty = all open editor files.")
-        file_paths: String = "",
+        @McpDescription("List of file paths or glob patterns. Empty = all open editor files.")
+        file_paths: List<String> = emptyList(),
         @McpDescription("Whether to include only errors or include both errors and warnings")
         errors_only: Boolean = true,
         @McpDescription("Total timeout in milliseconds")
@@ -69,7 +69,7 @@ class BatchProblemsToolset : McpToolset {
     ): Any {
         val project = currentCoroutineContext().project
 
-        val entries: List<ResolvedFileEntry> = if (file_paths.isNotBlank()) {
+        val entries: List<ResolvedFileEntry> = if (file_paths.isNotEmpty()) {
             resolvePatterns(project, file_paths)
         } else {
             resolveOpenFiles(project)
@@ -123,13 +123,14 @@ class BatchProblemsToolset : McpToolset {
         }.trimEnd()
     }
 
-    private suspend fun resolvePatterns(project: Project, file_paths: String): List<ResolvedFileEntry> {
-        val tokens = file_paths.split(";").map { it.trim() }.filter { it.isNotEmpty() }
+    private suspend fun resolvePatterns(project: Project, file_paths: List<String>): List<ResolvedFileEntry> {
         val seen = LinkedHashSet<VirtualFile>()
         val result = mutableListOf<ResolvedFileEntry>()
 
-        for (token in tokens) {
-            val resolved = resolveFilesByPattern(project, token)
+        for (token in file_paths) {
+            val pattern = token.trim()
+            if (pattern.isEmpty()) continue
+            val resolved = resolveFilesByPattern(project, pattern)
             for (entry in resolved.files) {
                 if (seen.add(entry.virtualFile)) {
                     result.add(entry)
