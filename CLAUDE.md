@@ -32,7 +32,7 @@ src/main/kotlin/dev/xdark/ijmcp/
   ReplaceMethodBodyToolset.kt  — replace_method_body
   DocumentationToolset.kt      — add_documentation, get_documentation, missing_documentation
   FindInFilesToolset.kt        — find_in_files
-  BatchProblemsToolset.kt      — get_file_problems
+  BatchProblemsToolset.kt      — get_problems_in_files
   BatchFileTextToolset.kt      — read_files
   CreateFileToolset.kt         — create_file
   RenameMemberToolset.kt       — rename_member

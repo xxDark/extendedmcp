@@ -51,7 +51,7 @@ class BatchProblemsToolset : McpToolset {
 	@McpDescription(
 		"""
         |Analyzes files for errors and warnings using IntelliJ's inspections.
-        |Batch version of get_file_problems — saves tokens by checking many files in one call.
+        |Batch version of get_problems_in_files — saves tokens by checking many files in one call.
         |
         |file_paths accepts a list of file paths or glob patterns (e.g. "src/**/*.java").
         |Leave empty to check all open editor files.
@@ -59,7 +59,7 @@ class BatchProblemsToolset : McpToolset {
         |Note: Lines and Columns are 1-based.
     """
 	)
-	suspend fun get_file_problems(
+	suspend fun get_problems_in_files(
 		@McpDescription("List of file paths or glob patterns. Empty = all open editor files.")
 		file_paths: List<String> = emptyList(),
 		@McpDescription("Whether to include only errors or include both errors and warnings")
