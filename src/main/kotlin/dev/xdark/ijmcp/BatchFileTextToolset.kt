@@ -17,9 +17,9 @@ import kotlin.math.min
 
 class BatchFileTextToolset : McpToolset {
 
-    @McpTool
-    @McpDescription(
-        """
+	@McpTool
+	@McpDescription(
+		"""
         |Reads text content from multiple files in one call — batch version of read_file.
         |Drastically reduces MCP round-trips when many files are needed at once.
         |Returns numbered lines (1-indexed, "L<line>: ...") per file.
@@ -42,101 +42,107 @@ class BatchFileTextToolset : McpToolset {
         |Binary files, files outside the project, missing literal paths, and unreadable files
         |are silently skipped.
     """
-    )
-    suspend fun read_files(
-        @McpDescription("List of glob patterns or project-relative file paths.")
-        patterns: List<String>,
-        @McpDescription("Number of files to skip before reading. Default 0.")
-        offset: Int = 0,
-        @McpDescription("Maximum number of files to return. Default 50.")
-        limit: Int = 50,
-        @McpDescription("1-based line number to start reading from in each file. Default 1.")
-        start_line: Int = 1,
-        @McpDescription("Maximum number of lines to return per file. Default 2000.")
-        max_lines: Int = 2000,
-    ): Any {
-        val project = currentCoroutineContext().project
-        val tokens = patterns.map { it.trim() }.filter { it.isNotEmpty() }
-        if (tokens.isEmpty()) mcpFail("No patterns provided.")
-        if (offset < 0) mcpFail("offset must be >= 0.")
-        if (limit <= 0) mcpFail("limit must be > 0.")
-        if (start_line <= 0) mcpFail("start_line must be > 0.")
-        if (max_lines <= 0) mcpFail("max_lines must be > 0.")
+	)
+	suspend fun read_files(
+		@McpDescription("List of glob patterns or project-relative file paths.")
+		patterns: List<String>,
+		@McpDescription("Number of files to skip before reading. Default 0.")
+		offset: Int = 0,
+		@McpDescription("Maximum number of files to return. Default 50.")
+		limit: Int = 50,
+		@McpDescription("1-based line number to start reading from in each file. Default 1.")
+		start_line: Int = 1,
+		@McpDescription("Maximum number of lines to return per file. Default 2000.")
+		max_lines: Int = 2000,
+	): Any {
+		val project = currentCoroutineContext().project
+		val tokens = patterns.map { it.trim() }.filter { it.isNotEmpty() }
+		if (tokens.isEmpty()) mcpFail("No patterns provided.")
+		if (offset < 0) mcpFail("offset must be >= 0.")
+		if (limit <= 0) mcpFail("limit must be > 0.")
+		if (start_line <= 0) mcpFail("start_line must be > 0.")
+		if (max_lines <= 0) mcpFail("max_lines must be > 0.")
 
-        val resolutionCap = offset + limit
-        val seen = HashSet<VirtualFile>()
-        val entries = mutableListOf<Pair<String, VirtualFile>>()
-        var hitMax = false
-        var missingPaths = 0
+		val resolutionCap = offset + limit
+		val seen = HashSet<VirtualFile>()
+		val entries = mutableListOf<Pair<String, VirtualFile>>()
+		var hitMax = false
+		var missingPaths = 0
 
-        for (token in tokens) {
-            if (hitMax) break
-            val remaining = resolutionCap - entries.size
-            if (remaining <= 0) {
-                hitMax = true
-                break
-            }
-            try {
-                val result = resolveFilesByPattern(project, token, max_files = remaining)
-                for (entry in result.files) {
-                    if (seen.add(entry.virtualFile)) {
-                        entries.add(entry.relativePath to entry.virtualFile)
-                    }
-                }
-                missingPaths += result.missingPaths
-                if (result.hitMax) hitMax = true
-            } catch (_: Exception) {
-                missingPaths++
-            }
-        }
+		for (token in tokens) {
+			if (hitMax) break
+			val remaining = resolutionCap - entries.size
+			if (remaining <= 0) {
+				hitMax = true
+				break
+			}
+			try {
+				val result = resolveFilesByPattern(project, token, max_files = remaining)
+				for (entry in result.files) {
+					if (seen.add(entry.virtualFile)) {
+						entries.add(entry.relativePath to entry.virtualFile)
+					}
+				}
+				missingPaths += result.missingPaths
+				if (result.hitMax) hitMax = true
+			} catch (_: Exception) {
+				missingPaths++
+			}
+		}
 
-        entries.sortBy { it.first }
-        val fromIndex = min(offset, entries.size)
-        val toIndex = min(offset + limit, entries.size)
-        val page = entries.subList(fromIndex, toIndex)
+		entries.sortBy { it.first }
+		val fromIndex = min(offset, entries.size)
+		val toIndex = min(offset + limit, entries.size)
+		val page = entries.subList(fromIndex, toIndex)
 
-        val sb = StringBuilder()
-        var filesRead = 0
-        var skipped = missingPaths
+		val sb = StringBuilder()
+		var filesRead = 0
+		var skipped = missingPaths
 
-        for ((path, vf) in page) {
-            val mark = sb.length
-            if (appendFileContent(sb, path, vf, start_line, max_lines)) {
-                sb.appendLine()
-                filesRead++
-            } else {
-                sb.setLength(mark)
-                skipped++
-            }
-        }
+		for ((path, vf) in page) {
+			val mark = sb.length
+			if (appendFileContent(sb, path, vf, start_line, max_lines)) {
+				sb.appendLine()
+				filesRead++
+			} else {
+				sb.setLength(mark)
+				skipped++
+			}
+		}
 
-        if (filesRead == 0) {
-            return "No files read ($skipped skipped)"
-        }
+		if (filesRead == 0) {
+			return "No files read ($skipped skipped)"
+		}
 
-        sb.append("Read ").append(filesRead).append(" files")
-        if (skipped > 0) sb.append(" (").append(skipped).append(" skipped)")
-        if (hitMax) sb.append(" (hit resolution cap)")
-        return sb.toString()
-    }
+		sb.append("Read ").append(filesRead).append(" files")
+		if (skipped > 0) sb.append(" (").append(skipped).append(" skipped)")
+		if (hitMax) sb.append(" (hit resolution cap)")
+		return sb.toString()
+	}
 
-    private suspend fun appendFileContent(sb: StringBuilder, path: String, vf: VirtualFile, startLine: Int, maxLines: Int): Boolean {
-        return readAction {
-            if (vf.fileType.isBinary) return@readAction false
-            val document = FileDocumentManager.getInstance().getDocument(vf) ?: return@readAction false
-            val lineCount = document.lineCount
-            if (lineCount == 0 || startLine > lineCount) return@readAction false
-            val indent = detectIndentation(document)
-            sb.append("=== ").append(path).append(" (").append(indent).appendLine(") ===")
-            val endLine = min(startLine + maxLines - 1, lineCount)
-            val chars = document.immutableCharSequence
-            for (lineNumber in startLine..endLine) {
-                val lineIndex = lineNumber - 1
-                sb.append('L').append(lineNumber).append(": ")
-                sb.append(chars, document.getLineStartOffset(lineIndex), document.getLineEndOffset(lineIndex))
-                sb.append('\n')
-            }
-            true
-        }
-    }
+	private suspend fun appendFileContent(
+		sb: StringBuilder,
+		path: String,
+		vf: VirtualFile,
+		startLine: Int,
+		maxLines: Int
+	): Boolean {
+		return readAction {
+			if (vf.fileType.isBinary) return@readAction false
+			val document = FileDocumentManager.getInstance().getDocument(vf) ?: return@readAction false
+			val lineCount = document.lineCount
+			if (lineCount == 0 || startLine > lineCount) return@readAction false
+			val indent = detectIndentation(document)
+			sb.append("=== ").append(path).append(" (").append(indent).appendLine(") ===")
+			val endLine = min(startLine + maxLines - 1, lineCount)
+			val chars = document.immutableCharSequence
+			for (lineNumber in startLine..endLine) {
+				val lineIndex = lineNumber - 1
+				sb.append('L').append(lineNumber).append(": ")
+				sb.append(chars, document.getLineStartOffset(lineIndex), document.getLineEndOffset(lineIndex))
+				sb.append('\n')
+			}
+			true
+		}
+	}
 }
