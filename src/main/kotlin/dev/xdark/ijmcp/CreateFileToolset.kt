@@ -13,49 +13,54 @@ import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.vfs.VfsUtil
 import com.intellij.openapi.vfs.findOrCreateFile
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.serialization.Serializable
 import java.io.IOException
 import kotlin.io.path.name
 import kotlin.io.path.pathString
 
-// Replacement for the built-in create_new_file tool.
-// The built-in version's parameter is named "content", but models sometimes send
-// "text" or vice versa. With a default value, a name mismatch silently produces
-// an empty file. Making the parameter required turns this into a loud error.
 class CreateFileToolset : McpToolset {
+
+	@Serializable
+	data class FileToCreate(
+		val path_in_project: String,
+		val content: String,
+	)
 
 	@McpTool
 	@McpDescription(
 		"""
-        |Creates a new file at the specified path within the project directory and populates it with text.
+        |Creates one or more files at the specified paths within the project directory and populates them with text.
         |Creates any necessary parent directories automatically.
     """
 	)
 	suspend fun create_file(
-		@McpDescription("Path where the file should be created relative to the project root")
-		path_in_project: String,
-		@McpDescription("Content to write into the new file")
-		content: String,
-		@McpDescription("Whether to overwrite an existing file. If false, an error is returned if the file exists.")
+		@McpDescription("List of files to create, each with path_in_project and content")
+		files: List<FileToCreate>,
+		@McpDescription("Whether to overwrite existing files. If false, an error is returned if any file exists.")
 		overwrite: Boolean = false,
 	): Any {
 		val project = currentCoroutineContext().project
-		val path = project.resolveInProject(path_in_project)
-		try {
-			writeAction {
-				val parent = VfsUtil.createDirectories(path.parent.pathString)
-				val existing = parent.findChild(path.name)
-				if (existing != null && !overwrite) {
-					mcpFail("File already exists: $path_in_project. Specify overwrite=true to overwrite it.")
+		val results = mutableListOf<String>()
+		for (file in files) {
+			val path = project.resolveInProject(file.path_in_project)
+			try {
+				writeAction {
+					val parent = VfsUtil.createDirectories(path.parent.pathString)
+					val existing = parent.findChild(path.name)
+					if (existing != null && !overwrite) {
+						mcpFail("File already exists: ${file.path_in_project}. Specify overwrite=true to overwrite it.")
+					}
+					val createdFile = parent.findOrCreateFile(path.name)
+					val document = FileDocumentManager.getInstance().getDocument(createdFile)
+						?: mcpFail("Cannot get document for: ${file.path_in_project}")
+					document.setText(file.content)
+					FileDocumentManager.getInstance().saveDocument(document)
 				}
-				val createdFile = parent.findOrCreateFile(path.name)
-				val document = FileDocumentManager.getInstance().getDocument(createdFile)
-					?: mcpFail("Cannot get document for: $path_in_project")
-				document.setText(content)
-				FileDocumentManager.getInstance().saveDocument(document)
+				results.add("Created ${file.path_in_project}")
+			} catch (e: IOException) {
+				mcpFail("Cannot create file ${file.path_in_project}: ${e.message}")
 			}
-		} catch (e: IOException) {
-			mcpFail("Cannot create file $path_in_project: ${e.message}")
 		}
-		return "Created file $path_in_project"
+		return results.joinToString("\n")
 	}
 }
