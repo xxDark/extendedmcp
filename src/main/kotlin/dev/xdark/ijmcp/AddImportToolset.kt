@@ -69,14 +69,14 @@ class AddImportToolset : McpToolset {
         val skipped = results.filter { !it.added }
         return buildString {
             if (added.size == 1) {
-                append("Added import ${added[0].import}")
+                append("Added import ").append(added[0].import)
             } else if (added.size > 1) {
-                append("Added ${added.size} imports:\n")
-                added.forEach { append("  ${it.import}\n") }
+                append("Added ").append(added.size).append(" imports:\n")
+                added.forEach { append("  ").append(it.import).append('\n') }
             }
             if (skipped.isNotEmpty()) {
                 if (added.isNotEmpty()) append("\n")
-                skipped.forEach { append("${it.import}: ${it.message}\n") }
+                skipped.forEach { append(it.import).append(": ").append(it.message).append('\n') }
             }
             if (added.isEmpty() && skipped.isEmpty()) {
                 append("No imports to add")
@@ -92,7 +92,7 @@ class AddImportToolset : McpToolset {
         val project = resolved.psiFile.project
 
         val javaFile = resolved.psiFile as? PsiJavaFile
-                ?: mcpFail("File is not a Java file")
+            ?: mcpFail("File is not a Java file")
 
         if (is_static) {
             val lastDot = fqName.lastIndexOf('.')
@@ -122,7 +122,11 @@ class AddImportToolset : McpToolset {
             val alreadyImported = readAction {
                 val importList = javaFile.importList ?: return@readAction false
                 importList.importStatements.any { it.qualifiedName == fqName } ||
-                    importList.importStatements.any { it.isOnDemand && it.qualifiedName == fqName.substringBeforeLast('.') }
+                        importList.importStatements.any {
+                            it.isOnDemand && it.qualifiedName == fqName.substringBeforeLast(
+                                '.'
+                            )
+                        }
             }
             if (alreadyImported) {
                 return AddImportResult(added = false, import = fqName, message = "Import already exists")
@@ -163,7 +167,7 @@ class AddImportToolset : McpToolset {
         val project = resolved.psiFile.project
 
         val ktFile = resolved.psiFile as? KtFile
-                ?: mcpFail("File is not a Kotlin file")
+            ?: mcpFail("File is not a Kotlin file")
 
         // Check if already imported
         val alreadyImported = readAction {

@@ -128,21 +128,21 @@ class FindClassToolset : McpToolset {
             }
 
         return buildString {
-            append("$kind $qualifiedName")
-            append("\n  Location: $location")
-            if (superClass != null) append("\n  Extends: $superClass")
-            if (interfaces.isNotEmpty()) append("\n  Implements: ${interfaces.joinToString(", ")}")
+            append(kind).append(' ').append(qualifiedName)
+            append("\n  Location: ").append(location)
+            if (superClass != null) append("\n  Extends: ").append(superClass)
+            if (interfaces.isNotEmpty()) append("\n  Implements: ").append(interfaces.joinToString(", "))
 
             if (fields.isNotEmpty()) {
                 append("\n  Fields:")
                 for (f in fields) {
-                    append("\n$f")
+                    append('\n').append(f)
                 }
             }
             if (methods.isNotEmpty()) {
                 append("\n  Methods:")
                 for (m in methods) {
-                    append("\n$m")
+                    append('\n').append(m)
                 }
             }
 

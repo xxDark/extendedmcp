@@ -15,6 +15,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
+
 class ExtendedRefactoringToolset : McpToolset {
 
     @McpTool
@@ -48,7 +49,7 @@ class ExtendedRefactoringToolset : McpToolset {
         finished.await()
 
         return if (psiFiles.size == 1) "Optimized imports in ${psiFiles[0].relativePath}"
-            else "Optimized imports in ${psiFiles.size} files"
+        else "Optimized imports in ${psiFiles.size} files"
     }
 
 }

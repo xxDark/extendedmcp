@@ -18,17 +18,20 @@ import dev.xdark.ijmcp.util.resolveTargetElement
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
+
 class SafeDeleteToolset : McpToolset {
 
     @McpTool
-    @McpDescription("""
+    @McpDescription(
+        """
         |Safely deletes a symbol (method, field, class, parameter) and reports all affected usages.
         |
         |By default (force=false), if the symbol has usages, it will NOT be deleted — instead the
         |usages are returned so you can fix them first. Use force=true to delete anyway.
         |
         |This is equivalent to IntelliJ's Refactor > Safe Delete (Alt+Delete).
-    """)
+    """
+    )
     suspend fun safe_delete(
         @McpDescription("Path relative to the project root") file_path: String,
         @McpDescription("Name of the symbol to delete") symbol_name: String = "",
@@ -56,8 +59,9 @@ class SafeDeleteToolset : McpToolset {
 
         if (usageLocations.isNotEmpty() && !force) {
             return buildString {
-                append("Cannot safely delete '$name': ${usageLocations.size} usage(s) found. Fix them first or use force=true.\n")
-                usageLocations.forEach { append("  $it\n") }
+                append("Cannot safely delete '").append(name).append("': ").append(usageLocations.size)
+                    .append(" usage(s) found. Fix them first or use force=true.\n")
+                usageLocations.forEach { append("  ").append(it).append('\n') }
             }.trimEnd()
         }
 

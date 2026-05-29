@@ -36,7 +36,8 @@ class QuickFixToolset : McpToolset {
     )
 
     @McpTool
-    @McpDescription("""
+    @McpDescription(
+        """
         |Lists or applies quick fixes (intentions) at a specific location in a file.
         |
         |Quick fixes are IDE-suggested corrections for problems like unused imports, type mismatches,
@@ -46,7 +47,8 @@ class QuickFixToolset : McpToolset {
         |With fix_index>=0: applies the fix at that index.
         |
         |Typical workflow: first call with fix_index=-1 to see available fixes, then call again with the desired fix_index.
-    """)
+    """
+    )
     suspend fun apply_quick_fix(
         @McpDescription("Path relative to the project root") file_path: String,
         @McpDescription("1-based line number") line: Int,
@@ -80,7 +82,13 @@ class QuickFixToolset : McpToolset {
                 val range = ProperTextRange(0, resolved.document.textLength)
 
                 jobToIndicator(coroutineContext.job, daemonIndicator) {
-                    HighlightingSessionImpl.runInsideHighlightingSession(psiFile, defaultContext(), null, range, false) { _ ->
+                    HighlightingSessionImpl.runInsideHighlightingSession(
+                        psiFile,
+                        defaultContext(),
+                        null,
+                        range,
+                        false
+                    ) { _ ->
                         val codeAnalyzer = DaemonCodeAnalyzer.getInstance(project) as DaemonCodeAnalyzerImpl
                         val infos = codeAnalyzer.runMainPasses(psiFile, resolved.document, daemonIndicator)
                         collectedInfos.addAll(infos)
@@ -111,14 +119,16 @@ class QuickFixToolset : McpToolset {
                 return "No quick fixes available at $line:$column"
             }
             return buildString {
-                appendLine("${fixActions.size} quick fixes available at $line:$column:")
+                append(fixActions.size).append(" quick fixes available at ").append(line).append(':').append(column)
+                    .appendLine(":")
                 appendLine()
                 for ((index, pair) in fixActions.withIndex()) {
                     val action = pair.first
                     val info = pair.second
-                    appendLine("  $index: ${action.text}")
+                    append("  ").append(index).append(": ").appendLine(action.text)
                     if (!info.description.isNullOrEmpty()) {
-                        appendLine("     problem: ${info.description} [${info.severity.name}]")
+                        append("     problem: ").append(info.description).append(" [").append(info.severity.name)
+                            .appendLine("]")
                     }
                 }
             }.trimEnd()

@@ -87,8 +87,8 @@ class FileStructureToolset : McpToolset {
 
         return buildString {
             append(prefix)
-            append("$kind ${cls.name ?: "<anonymous>"}")
-            append(" [line ${lineOf(cls, document)}]")
+            append(kind).append(' ').append(cls.name ?: "<anonymous>")
+            append(" [line ").append(lineOf(cls, document)).append(']')
             append("\n")
 
             // Fields
@@ -100,8 +100,8 @@ class FileStructureToolset : McpToolset {
                     "?"
                 }
                 append(prefix)
-                append("  $typeName ${field.name}")
-                append(" [line ${lineOf(field, document)}]")
+                append("  ").append(typeName).append(' ').append(field.name)
+                append(" [line ").append(lineOf(field, document)).append(']')
                 append("\n")
             }
 
@@ -123,10 +123,10 @@ class FileStructureToolset : McpToolset {
                 } catch (_: Exception) {
                     "?"
                 }
-                val label = if (method.isConstructor) "constructor" else "$returnType"
+                val label = if (method.isConstructor) "constructor" else returnType
                 append(prefix)
-                append("  $label ${method.name}($params)")
-                append(" [line ${lineOf(method, document)}]")
+                append("  ").append(label).append(' ').append(method.name).append('(').append(params).append(')')
+                append(" [line ").append(lineOf(method, document)).append(']')
                 append("\n")
             }
 
@@ -149,17 +149,19 @@ class FileStructureToolset : McpToolset {
                 val params = declaration.valueParameters.joinToString(", ") { p ->
                     "${p.name}: ${p.typeReference?.text ?: "?"}"
                 }
-                "${prefix}constructor($params) [line ${lineOf(declaration, document)}]\n"
+                buildString {
+                    append(prefix).append("constructor(").append(params).append(')')
+                    append(" [line ").append(lineOf(declaration, document)).append("]\n")
+                }
             }
 
             is KtTypeAlias -> {
                 val prefix = indent(depth)
-                "${prefix}typealias ${declaration.name} = ${declaration.getTypeReference()?.text ?: "?"} [line ${
-                    lineOf(
-                        declaration,
-                        document
-                    )
-                }]\n"
+                buildString {
+                    append(prefix).append("typealias ").append(declaration.name)
+                    append(" = ").append(declaration.getTypeReference()?.text ?: "?")
+                    append(" [line ").append(lineOf(declaration, document)).append("]\n")
+                }
             }
 
             else -> null
@@ -180,8 +182,8 @@ class FileStructureToolset : McpToolset {
 
         return buildString {
             append(prefix)
-            append("$kind ${cls.name ?: "<anonymous>"}")
-            append(" [line ${lineOf(cls, document)}]")
+            append(kind).append(' ').append(cls.name ?: "<anonymous>")
+            append(" [line ").append(lineOf(cls, document)).append(']')
             append("\n")
 
             cls.primaryConstructor?.let { ctor ->
@@ -194,8 +196,8 @@ class FileStructureToolset : McpToolset {
                     "$valVar${p.name}: ${p.typeReference?.text ?: "?"}"
                 }
                 append(prefix)
-                append("  constructor($params)")
-                append(" [line ${lineOf(ctor, document)}]")
+                append("  constructor(").append(params).append(')')
+                append(" [line ").append(lineOf(ctor, document)).append(']')
                 append("\n")
             }
 
@@ -211,21 +213,21 @@ class FileStructureToolset : McpToolset {
             "${p.name}: ${p.typeReference?.text ?: "?"}"
         }
         val returnType = function.typeReference?.text
-        val sig = buildString {
-            append("fun ${function.name}($params)")
-            if (returnType != null) append(": $returnType")
+        return buildString {
+            append(prefix).append("fun ").append(function.name).append('(').append(params).append(')')
+            if (returnType != null) append(": ").append(returnType)
+            append(" [line ").append(lineOf(function, document)).append("]\n")
         }
-        return "${prefix}$sig [line ${lineOf(function, document)}]\n"
     }
 
     private fun buildKtPropertyEntry(property: KtProperty, document: Document, depth: Int): String {
         val prefix = indent(depth)
         val typeText = property.typeReference?.text
         val keyword = if (property.isVar) "var" else "val"
-        val sig = buildString {
-            append("$keyword ${property.name}")
-            if (typeText != null) append(": $typeText")
+        return buildString {
+            append(prefix).append(keyword).append(' ').append(property.name)
+            if (typeText != null) append(": ").append(typeText)
+            append(" [line ").append(lineOf(property, document)).append("]\n")
         }
-        return "${prefix}$sig [line ${lineOf(property, document)}]\n"
     }
 }

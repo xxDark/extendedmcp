@@ -107,16 +107,19 @@ class FindInFilesToolset : McpToolset {
                     isWithSubdirectories = true
                     isProjectScope = false
                 }
+
                 module_name.isNotEmpty() -> {
                     this.moduleName = module_name
                     isProjectScope = false
                 }
+
                 scope == "all" -> {
                     isProjectScope = false
                     isCustomScope = true
                     customScope = GlobalSearchScope.allScope(project)
                     customScopeName = "All Places"
                 }
+
                 else -> {
                     isProjectScope = true
                 }
@@ -159,13 +162,15 @@ class FindInFilesToolset : McpToolset {
 
         val truncatedFlag = truncated.get()
         return buildString {
-            appendLine("${matches.size} matches for '$search_text'${if (truncatedFlag) " (truncated)" else ""}:")
+            append(matches.size).append(" matches for '").append(search_text).append('\'')
+            if (truncatedFlag) append(" (truncated)")
+            appendLine(":")
             appendLine()
             val byFile = matches.groupBy { it.file }
             for ((file, fileMatches) in byFile) {
                 appendLine(file)
                 for (m in fileMatches) {
-                    appendLine("  ${m.line}:${m.column} ${m.context}")
+                    append("  ").append(m.line).append(':').append(m.column).append(' ').appendLine(m.context)
                 }
                 appendLine()
             }

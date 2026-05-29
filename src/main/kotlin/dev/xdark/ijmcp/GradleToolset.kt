@@ -26,20 +26,20 @@ class GradleToolset : McpToolset {
     companion object {
         private val NOISY_LINE = Regex(
             """^(""" +
-                """Downloading |Download |\s*>\s*(Downloading|Download)\b|\.+$""" +  // download
-                """|[<>]\s+\S+\.\S+.*[KMB]?/s\s*$""" +  // progress
-                """|Starting Gradle Daemon""" +
-                """|Gradle Daemon started in """ +
-                """|Consider enabling configuration cache""" +
-                """|The Daemon will expire """ +
-                """|The project memory settings """ +
-                """|The daemon will restart """ +
-                """|These settings can be adjusted """ +
-                """|The currently configured max heap """ +
-                """|For more information on how to set these """ +
-                """|To disable this warning, set """ +
-                """|Daemon will be stopped """ +
-            """)"""
+                    """Downloading |Download |\s*>\s*(Downloading|Download)\b|\.+$""" +  // download
+                    """|[<>]\s+\S+\.\S+.*[KMB]?/s\s*$""" +  // progress
+                    """|Starting Gradle Daemon""" +
+                    """|Gradle Daemon started in """ +
+                    """|Consider enabling configuration cache""" +
+                    """|The Daemon will expire """ +
+                    """|The project memory settings """ +
+                    """|The daemon will restart """ +
+                    """|These settings can be adjusted """ +
+                    """|The currently configured max heap """ +
+                    """|For more information on how to set these """ +
+                    """|To disable this warning, set """ +
+                    """|Daemon will be stopped """ +
+                    """)"""
         )
     }
 
@@ -50,7 +50,8 @@ class GradleToolset : McpToolset {
     }
 
     @McpTool
-    @McpDescription("""
+    @McpDescription(
+        """
         |Executes a Gradle task in the current project.
         |
         |This is equivalent to running "./gradlew <tasks> <arguments>" but through IntelliJ's Gradle integration,
@@ -61,7 +62,8 @@ class GradleToolset : McpToolset {
         |  tasks="test", arguments="--tests com.example.MyTest"
         |  tasks="clean build", arguments="--info"
         |  tasks="dependencies", arguments="--configuration runtimeClasspath"
-    """)
+    """
+    )
     suspend fun run_gradle_task(
         @McpDescription("Space-separated Gradle task names (e.g. 'build', 'clean test', 'dependencies')") tasks: String,
         @McpDescription("Additional command-line arguments (e.g. '--info', '--tests com.example.MyTest')") arguments: String = "",
@@ -125,7 +127,8 @@ class GradleToolset : McpToolset {
                 }
             }
 
-            val environment = ExecutionEnvironmentBuilder.create(project, executor, runnerAndConfigSettings.configuration).build()
+            val environment =
+                ExecutionEnvironmentBuilder.create(project, executor, runnerAndConfigSettings.configuration).build()
             environment.callback = callback
             runner.execute(environment)
         }

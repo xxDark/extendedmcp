@@ -160,7 +160,12 @@ class ReplaceMethodBodyToolset : McpToolset {
                     if (classes.size == 1) {
                         val ktClass = classes[0]
                         val body = ktClass.body ?: mcpFail("Class '${ktClass.name}' has no body")
-                        resolveKotlinFunction(body.declarations, method_name, member_index, "in class '${ktClass.name}'")
+                        resolveKotlinFunction(
+                            body.declarations,
+                            method_name,
+                            member_index,
+                            "in class '${ktClass.name}'"
+                        )
                     } else {
                         mcpFail("Method '$method_name' not found. Specify class_name.")
                     }

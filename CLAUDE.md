@@ -37,6 +37,7 @@ src/main/kotlin/dev/xdark/ijmcp/
   RenameMemberToolset.kt       — rename_member
   ShortenReferencesToolset.kt  — shorten_references
   ReformatToolset.kt           — reformat_files
+  ReplaceLinesToolset.kt       — replace_lines
   ToolFilterToolset.kt         — list_tools_filter
   FilteredToolsProvider.kt     — McpToolsProvider that replaces built-in, applies filter
   ToolFilterState.kt           — Persists disabled tool names

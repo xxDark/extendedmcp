@@ -21,15 +21,18 @@ import dev.xdark.ijmcp.util.resolveTargetElement
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
+
 class InlineToolset : McpToolset {
 
     @McpTool
-    @McpDescription("""
+    @McpDescription(
+        """
         |Inlines a method at all call sites, replacing each call with the method body.
         |Optionally deletes the original method after inlining.
         |
         |This is equivalent to IntelliJ's Refactor > Inline Method (Ctrl+Alt+N).
-    """)
+    """
+    )
     suspend fun inline_method(
         @McpDescription("Path relative to the project root") file_path: String,
         @McpDescription("Name of the method to inline") method_name: String = "",
@@ -86,6 +89,6 @@ class InlineToolset : McpToolset {
         }
 
         return "Inlined '$name' at $callSiteCount call site(s)." +
-            if (delete_declaration) " Declaration removed." else ""
+                if (delete_declaration) " Declaration removed." else ""
     }
 }

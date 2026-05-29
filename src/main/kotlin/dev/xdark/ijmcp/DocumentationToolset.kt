@@ -146,7 +146,7 @@ class DocumentationToolset : McpToolset {
                 appendLine()
                 appendLine()
             }
-            appendLine("Documentation for ${entry.signature}:")
+            append("Documentation for ").append(entry.signature).appendLine(":")
             appendLine()
             val doc = entry.documentation
             if (doc != null) {
@@ -205,15 +205,19 @@ class DocumentationToolset : McpToolset {
 
         return buildString {
             for (fileResult in allFileResults) {
-                appendLine("${fileResult.undocumented.size} undocumented elements in ${fileResult.file_path} (${fileResult.total} total, ${fileResult.documented} documented):")
+                append(fileResult.undocumented.size).append(" undocumented elements in ").append(fileResult.file_path)
+                    .append(" (").append(fileResult.total).append(" total, ").append(fileResult.documented)
+                    .appendLine(" documented):")
                 appendLine()
                 for (elem in fileResult.undocumented) {
-                    val prefix = if (elem.class_name.isNotEmpty()) "${elem.class_name}." else ""
-                    appendLine("  ${elem.kind} $prefix${elem.signature} [line ${elem.line}]")
+                    append("  ").append(elem.kind).append(' ')
+                    if (elem.class_name.isNotEmpty()) append(elem.class_name).append('.')
+                    append(elem.signature).append(" [line ").append(elem.line).appendLine("]")
                 }
                 appendLine()
             }
-            append("Total: $totalUndocumented undocumented across ${allFileResults.size} files (${psiFiles.size} files checked)")
+            append("Total: ").append(totalUndocumented).append(" undocumented across ").append(allFileResults.size)
+                .append(" files (").append(psiFiles.size).append(" files checked)")
         }
     }
 

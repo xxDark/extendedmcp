@@ -23,7 +23,8 @@ import kotlinx.coroutines.withContext
 class ExtractMethodToolset : McpToolset {
 
     @McpTool
-    @McpDescription("""
+    @McpDescription(
+        """
         |Extracts the selected code range into a new method (Java).
         |
         |IntelliJ automatically determines parameters, return type, and exceptions.
@@ -31,7 +32,8 @@ class ExtractMethodToolset : McpToolset {
         |
         |Specify the range of code to extract using start/end line numbers (1-based).
         |The entire lines in the range will be extracted.
-    """)
+    """
+    )
     suspend fun extract_method(
         @McpDescription("Path relative to the project root") file_path: String,
         @McpDescription("1-based start line of the code to extract") start_line: Int,

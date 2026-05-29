@@ -101,21 +101,22 @@ class BatchProblemsToolset : McpToolset {
 
         if (totalProblems == 0) {
             return buildString {
-                append("No problems found ($filesAnalyzed files analyzed)")
+                append("No problems found (").append(filesAnalyzed).append(" files analyzed)")
                 if (timedOut) append(" (timed out)")
             }
         }
 
         return buildString {
-            append("Analyzed $filesAnalyzed files, $totalProblems problems found")
+            append("Analyzed ").append(filesAnalyzed).append(" files, ").append(totalProblems).append(" problems found")
             if (timedOut) append(" (timed out)")
             appendLine(":")
             appendLine()
             for (fp in results) {
-                appendLine("${fp.file_path}:")
+                append(fp.file_path).appendLine(":")
                 for (p in fp.problems) {
-                    appendLine("  ${p.line}:${p.column} ${p.severity}: ${p.description}")
-                    appendLine("    ${p.lineContent}")
+                    append("  ").append(p.line).append(':').append(p.column).append(' ').append(p.severity).append(": ")
+                        .appendLine(p.description)
+                    append("    ").appendLine(p.lineContent)
                 }
                 appendLine()
             }

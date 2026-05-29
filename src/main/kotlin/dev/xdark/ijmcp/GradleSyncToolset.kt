@@ -16,11 +16,13 @@ import org.jetbrains.plugins.gradle.util.GradleConstants
 class GradleSyncToolset : McpToolset {
 
     @McpTool
-    @McpDescription("""
+    @McpDescription(
+        """
         |Triggers a Gradle project sync (reimport) in IntelliJ.
         |This refreshes the project model, resolves dependencies, and updates the IDE's view of the project.
         |Equivalent to clicking the "Reload All Gradle Projects" button.
-    """)
+    """
+    )
     suspend fun gradle_sync(
         @McpDescription("If true, forces downloading sources for all dependencies") download_sources: Boolean = false,
         @McpDescription("Timeout in milliseconds to wait for sync completion (default 300000 = 5 min). 0 = fire and forget.") timeout: Int = 300000,

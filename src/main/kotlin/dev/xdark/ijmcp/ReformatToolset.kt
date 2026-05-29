@@ -15,6 +15,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
+
 class ReformatToolset : McpToolset {
 
     @McpTool
@@ -50,6 +51,6 @@ class ReformatToolset : McpToolset {
         finished.await()
 
         return if (psiFiles.size == 1) "Reformatted ${psiFiles[0].relativePath}"
-            else "Reformatted ${psiFiles.size} files"
+        else "Reformatted ${psiFiles.size} files"
     }
 }

@@ -72,13 +72,14 @@ class ShortenReferencesToolset : McpToolset {
 
         val message = buildString {
             if (psiFiles.size == 1) {
-                if (changedFiles.isNotEmpty()) append("Shortened references in ${psiFiles[0].relativePath}")
-                else append("No fully qualified references to shorten in ${psiFiles[0].relativePath}")
+                if (changedFiles.isNotEmpty()) append("Shortened references in ").append(psiFiles[0].relativePath)
+                else append("No fully qualified references to shorten in ").append(psiFiles[0].relativePath)
             } else {
-                append("Processed ${psiFiles.size} files, ${changedFiles.size} changed")
+                append("Processed ").append(psiFiles.size).append(" files, ").append(changedFiles.size)
+                    .append(" changed")
                 if (changedFiles.isNotEmpty()) {
                     append(":\n")
-                    changedFiles.forEach { append("  $it\n") }
+                    changedFiles.forEach { append("  ").append(it).append('\n') }
                 }
             }
         }

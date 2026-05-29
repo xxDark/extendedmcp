@@ -121,7 +121,7 @@ class FindUsagesToolset : McpToolset {
             append(" (declared at ")
             append(declarationLocation)
             append(")")
-            if (truncated) append(" (truncated at $max_results results)")
+            if (truncated) append(" (truncated at ").append(max_results).append(" results)")
             append(":\n")
 
             for (usage in usages) {

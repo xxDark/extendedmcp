@@ -28,10 +28,10 @@ class ToolFilterToolset : McpToolset {
             append(" tools registered:\n\n")
             for ((name, description, enabled) in tools) {
                 val status = if (enabled) "enabled" else "DISABLED"
-                append("[$status] $name")
+                append('[').append(status).append("] ").append(name)
                 val firstLine = description.lineSequence().firstOrNull { it.isNotBlank() }?.trim()
                 if (firstLine != null) {
-                    append(" — $firstLine")
+                    append(" — ").append(firstLine)
                 }
                 append("\n")
             }

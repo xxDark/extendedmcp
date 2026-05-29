@@ -33,7 +33,8 @@ class ChangeSignatureToolset : McpToolset {
     )
 
     @McpTool
-    @McpDescription("""
+    @McpDescription(
+        """
         |Changes a method's signature — rename, change return type, add/remove/reorder/rename parameters.
         |Automatically updates all call sites across the project.
         |
@@ -50,7 +51,8 @@ class ChangeSignatureToolset : McpToolset {
         |  Remove 2nd param:   parameters='[{"name":"x","type":"int","oldIndex":0}]'
         |  Swap params:        parameters='[{"name":"y","type":"int","oldIndex":1},{"name":"x","type":"int","oldIndex":0}]'
         |  Rename param:       parameters='[{"name":"new_name","type":"int","oldIndex":0}]'
-    """)
+    """
+    )
     suspend fun change_method_signature(
         @McpDescription("Path relative to the project root") file_path: String,
         @McpDescription("Name of the method to change") method_name: String,
