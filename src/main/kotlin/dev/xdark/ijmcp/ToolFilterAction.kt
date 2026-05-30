@@ -217,7 +217,7 @@ private class ToolFilterDialog(private val provider: FilteredToolsProvider) : Di
 		for (tool in tools) {
 			state.setDisabled(tool.name, !tool.enabled)
 		}
-		FilteredToolsProvider.triggerRefresh()
+		ArgNormalizingFilterProvider.triggerUpdate()
 		super.doOKAction()
 	}
 }
