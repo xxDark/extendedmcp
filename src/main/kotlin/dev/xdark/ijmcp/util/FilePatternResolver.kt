@@ -15,6 +15,7 @@ import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
 import java.nio.file.FileSystems
 import java.nio.file.Path
+import java.nio.file.PathMatcher
 
 data class ResolvedFileEntry(
 	val relativePath: String,
@@ -99,11 +100,7 @@ private suspend fun resolveGlobPattern(
 	extensions: Set<String>?,
 	max_files: Int,
 ): FilePatternResult {
-	val matcher = try {
-		FileSystems.getDefault().getPathMatcher("glob:$pattern")
-	} catch (e: Exception) {
-		mcpFail("Invalid glob pattern '$pattern': ${e.message}")
-	}
+	val matchers = createGlobMatchers(pattern)
 
 	return readAction {
 		val projectDir = project.projectDirectory
@@ -121,7 +118,7 @@ private suspend fun resolveGlobPattern(
 					if (rel.startsWith("..") || rel.contains(".jar!")) {
 						return@iterateContent true
 					}
-					if (matcher.matches(Path.of(rel))) {
+					if (matchers.any { it.matches(Path.of(rel)) }) {
 						result.add(ResolvedFileEntry(rel, vf))
 						if (result.size >= max_files) {
 							hitMax = true
@@ -134,5 +131,29 @@ private suspend fun resolveGlobPattern(
 		}
 
 		FilePatternResult(result, hitMax, 0)
+	}
+}
+
+// JDK's PathMatcher treats /**/ as /.*/  in regex, which requires at least
+// one directory level. Expand each /**/ into a variant with just / so that
+// ** can match zero directories.
+private fun expandDoubleStarVariants(pattern: String): List<String> {
+	val idx = pattern.indexOf("/**/")
+	if (idx < 0) return listOf(pattern)
+	val prefix = pattern.substring(0, idx)
+	val rest = pattern.substring(idx + 4)
+	return expandDoubleStarVariants(rest).flatMap { expanded ->
+		listOf("$prefix/**/$expanded", "$prefix/$expanded")
+	}
+}
+
+private fun createGlobMatchers(pattern: String): List<PathMatcher> {
+	val fs = FileSystems.getDefault()
+	return expandDoubleStarVariants(pattern).map {
+		try {
+			fs.getPathMatcher("glob:$it")
+		} catch (e: Exception) {
+			mcpFail("Invalid glob pattern '$pattern': ${e.message}")
+		}
 	}
 }

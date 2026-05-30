@@ -15,10 +15,7 @@ import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
 import com.intellij.mcpserver.util.awaitExternalChangesAndIndexing
-import com.intellij.mcpserver.util.projectDirectory
-import com.intellij.mcpserver.util.relativizeIfPossible
 import com.intellij.openapi.application.readAction
-import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.progress.jobToIndicator
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.ProperTextRange
@@ -26,8 +23,8 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.VirtualFile
 import dev.xdark.ijmcp.util.PsiFileEntry
 import dev.xdark.ijmcp.util.ResolvedFileEntry
-import dev.xdark.ijmcp.util.resolvePsi
 import dev.xdark.ijmcp.util.resolveFilesByPattern
+import dev.xdark.ijmcp.util.resolvePsi
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
 import kotlinx.coroutines.withTimeoutOrNull
@@ -54,14 +51,13 @@ class BatchProblemsToolset : McpToolset {
         |Batch version of get_problems_in_files — saves tokens by checking many files in one call.
         |
         |file_paths accepts a list of file paths or glob patterns (e.g. "src/**/*.java").
-        |Leave empty to check all open editor files.
         |Files with no problems are omitted from the results.
         |Note: Lines and Columns are 1-based.
     """
 	)
 	suspend fun get_problems_in_files(
-		@McpDescription("List of file paths or glob patterns. Empty = all open editor files.")
-		file_paths: List<String> = emptyList(),
+		@McpDescription("List of file paths or glob patterns.")
+		file_paths: List<String>,
 		@McpDescription("Whether to include only errors or include both errors and warnings")
 		errors_only: Boolean = true,
 		@McpDescription("Total timeout in milliseconds")
@@ -69,14 +65,9 @@ class BatchProblemsToolset : McpToolset {
 	): Any {
 		val project = currentCoroutineContext().project
 
-		val entries: List<ResolvedFileEntry> = if (file_paths.isNotEmpty()) {
-			resolvePatterns(project, file_paths)
-		} else {
-			resolveOpenFiles(project)
-		}
-
+		val entries = resolvePatterns(project, file_paths)
 		if (entries.isEmpty()) {
-			mcpFail("No files to analyze. Specify file_paths or open files in the editor.")
+			mcpFail("No files matched the given patterns.")
 		}
 
 		val filesToAnalyze = entries.resolvePsi(project)
@@ -140,24 +131,6 @@ class BatchProblemsToolset : McpToolset {
 		return result
 	}
 
-	private suspend fun resolveOpenFiles(project: Project): List<ResolvedFileEntry> {
-		return readAction {
-			val projectDir = project.projectDirectory
-			FileEditorManager.getInstance(project).openFiles
-				.filter { it.isValid && !it.isDirectory }
-				.mapNotNull { vf ->
-					val relativePath = try {
-						projectDir.relativizeIfPossible(vf)
-					} catch (_: IllegalArgumentException) {
-						return@mapNotNull null
-					}
-					if (relativePath.startsWith("..") || relativePath.contains(".jar!")) {
-						return@mapNotNull null
-					}
-					ResolvedFileEntry(relativePath, vf)
-				}
-		}
-	}
 
 	private suspend fun analyzeFile(
 		project: Project,
