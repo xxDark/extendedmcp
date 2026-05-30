@@ -1,5 +1,6 @@
 package dev.xdark.ijmcp
 
+import com.intellij.mcpserver.McpToolDescriptor
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.ui.DialogWrapper
@@ -15,6 +16,8 @@ import java.awt.FlowLayout
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.StringSelection
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
 import javax.swing.*
 import javax.swing.event.DocumentEvent
 import javax.swing.table.AbstractTableModel
@@ -28,7 +31,9 @@ class ToolFilterAction : AnAction() {
 	}
 }
 
-private class ToolEntry(val name: String, val isBuiltIn: Boolean, var enabled: Boolean)
+private class ToolEntry(val descriptor: McpToolDescriptor, val isBuiltIn: Boolean, var enabled: Boolean) {
+	val name: String get() = descriptor.name
+}
 
 private class ToolTableModel(val tools: List<ToolEntry>) : AbstractTableModel() {
 	override fun getRowCount() = tools.size
@@ -77,17 +82,26 @@ private class ToolFilterDialog : DialogWrapper(null) {
 		val disabled = ToolFilterState.getInstance().getDisabledSet()
 		val service = ToolListService.getInstance()
 		val builtInNames = service.getBuiltInToolNames()
-		val allToolNames = service.getAllTools()
-			.map { it.descriptor.name }
-			.distinct()
-			.sorted()
+		val allTools = service.getAllTools()
+			.distinctBy { it.descriptor.name }
+			.sortedBy { it.descriptor.name }
 
-		tools = allToolNames.map { name ->
-			ToolEntry(name, name in builtInNames, name !in disabled)
+		tools = allTools.map { tool ->
+			ToolEntry(tool.descriptor, tool.descriptor.name in builtInNames, tool.descriptor.name !in disabled)
 		}
 
 		tableModel = ToolTableModel(tools)
-		table = JBTable(tableModel).apply {
+		table = object : JBTable(tableModel) {
+			override fun getToolTipText(e: MouseEvent): String? {
+				val row = rowAtPoint(e.point)
+				if (row < 0) return null
+				val modelRow = convertRowIndexToModel(row)
+				val desc = tools[modelRow].descriptor.description
+				if (desc.isBlank()) return null
+				val truncated = desc.lineSequence().take(3).joinToString("<br>")
+				return "<html>$truncated</html>"
+			}
+		}.apply {
 			setShowGrid(false)
 			intercellSpacing = JBUI.emptySize()
 			columnModel.getColumn(0).apply {
@@ -98,6 +112,14 @@ private class ToolFilterDialog : DialogWrapper(null) {
 				maxWidth = JBUI.scale(60)
 				minWidth = JBUI.scale(60)
 			}
+			addMouseListener(object : MouseAdapter() {
+				override fun mousePressed(e: MouseEvent) {
+					if (e.isPopupTrigger) showToolPopup(e)
+				}
+				override fun mouseReleased(e: MouseEvent) {
+					if (e.isPopupTrigger) showToolPopup(e)
+				}
+			})
 		}
 		sorter = TableRowSorter(tableModel)
 		table.rowSorter = sorter
@@ -212,6 +234,19 @@ private class ToolFilterDialog : DialogWrapper(null) {
 			"$enabled/${tools.size} enabled  |  built-in: $builtInEnabled/$builtInTotal  |  ext: $extEnabled/$extTotal"
 	}
 
+	private fun showToolPopup(e: MouseEvent) {
+		val row = table.rowAtPoint(e.point)
+		if (row < 0) return
+		table.setRowSelectionInterval(row, row)
+		val modelRow = table.convertRowIndexToModel(row)
+		val entry = tools[modelRow]
+		JPopupMenu().apply {
+			add(JMenuItem("Show Details").apply {
+				addActionListener { ToolDetailsDialog(entry.descriptor).show() }
+			})
+		}.show(table, e.x, e.y)
+	}
+
 	override fun doOKAction() {
 		val state = ToolFilterState.getInstance()
 		for (tool in tools) {
@@ -220,6 +255,42 @@ private class ToolFilterDialog : DialogWrapper(null) {
 		ArgNormalizingFilterProvider.triggerUpdate()
 		super.doOKAction()
 	}
+}
+
+private class ToolDetailsDialog(private val descriptor: McpToolDescriptor) : DialogWrapper(null) {
+	init {
+		title = descriptor.name
+		init()
+	}
+
+	override fun createCenterPanel(): JComponent {
+		val text = buildString {
+			append("Name: ").appendLine(descriptor.name)
+			appendLine()
+			appendLine("Description:")
+			appendLine(descriptor.description)
+			appendLine()
+			appendLine("Input Schema:")
+			appendLine(descriptor.inputSchema.prettyPrint())
+			val output = descriptor.outputSchema
+			if (output != null) {
+				appendLine()
+				appendLine("Output Schema:")
+				appendLine(output.prettyPrint())
+			}
+		}
+		val textArea = JTextArea(text).apply {
+			isEditable = false
+			lineWrap = true
+			wrapStyleWord = true
+			caretPosition = 0
+		}
+		return JBScrollPane(textArea).apply {
+			preferredSize = JBUI.size(600, 400)
+		}
+	}
+
+	override fun createActions() = arrayOf(okAction)
 }
 
 private class ApplyConfigDialog(clipboard: String?) : DialogWrapper(null) {
