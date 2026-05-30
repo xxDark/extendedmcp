@@ -24,8 +24,7 @@ import kotlinx.serialization.json.Json
 
 class ToolFilterAction : AnAction() {
 	override fun actionPerformed(e: AnActionEvent) {
-		val provider = FilteredToolsProvider.getInstance() ?: return
-		ToolFilterDialog(provider).show()
+		ToolFilterDialog().show()
 	}
 }
 
@@ -64,7 +63,7 @@ private class ToolTableModel(val tools: List<ToolEntry>) : AbstractTableModel() 
 	}
 }
 
-private class ToolFilterDialog(private val provider: FilteredToolsProvider) : DialogWrapper(null) {
+private class ToolFilterDialog : DialogWrapper(null) {
 
 	private val tools: List<ToolEntry>
 	private val tableModel: ToolTableModel
@@ -76,8 +75,9 @@ private class ToolFilterDialog(private val provider: FilteredToolsProvider) : Di
 		title = "MCP Tool Filter"
 
 		val disabled = ToolFilterState.getInstance().getDisabledSet()
-		val builtInNames = provider.getBuiltInToolNames()
-		val allToolNames = provider.getAllToolsUnfiltered()
+		val service = ToolListService.getInstance()
+		val builtInNames = service.getBuiltInToolNames()
+		val allToolNames = service.getAllTools()
 			.map { it.descriptor.name }
 			.distinct()
 			.sorted()

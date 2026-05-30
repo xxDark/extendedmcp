@@ -47,7 +47,6 @@
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.DownloadSourcesToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.BatchReplaceTextToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.ToolFilterToolset"/>
-        <mcpServer.mcpToolsProvider implementation="dev.xdark.ijmcp.FilteredToolsProvider"/>
         <mcpServer.mcpToolFilterProvider implementation="dev.xdark.ijmcp.ArgNormalizingFilterProvider"/>
     </extensions>
 
