@@ -32,7 +32,9 @@ class FilteredToolsProvider : McpToolsProvider {
 
 		val allTools = cachedProviderTools + toolsetTools
 		val disabled = ToolFilterState.getInstance().getDisabledSet()
-		return allTools.filter { it.descriptor.name !in disabled }
+		return allTools
+			.filter { it.descriptor.name !in disabled }
+			.map(::ArgNormalizingMcpTool)
 	}
 
 	fun getBuiltInToolNames(): Set<String> {
