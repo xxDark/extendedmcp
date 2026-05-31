@@ -13,7 +13,6 @@ import com.intellij.openapi.vfs.VirtualFile
 import dev.xdark.ijmcp.util.detectIndentation
 import dev.xdark.ijmcp.util.resolveFilesByPattern
 import kotlinx.coroutines.currentCoroutineContext
-import kotlin.math.min
 
 class BatchFileTextToolset : McpToolset {
 
@@ -36,9 +35,6 @@ class BatchFileTextToolset : McpToolset {
         |start_line and max_lines apply uniformly to every file.
         |For different windows per file, use separate tool calls.
         |
-        |Files are sorted by path for deterministic ordering. Use offset/limit to paginate
-        |through large result sets (like SQL OFFSET/LIMIT).
-        |
         |Binary files, files outside the project, missing literal paths, and unreadable files
         |are silently skipped.
     """
@@ -46,10 +42,6 @@ class BatchFileTextToolset : McpToolset {
 	suspend fun read_files(
 		@McpDescription("List of glob patterns or project-relative file paths.")
 		patterns: List<String>,
-		@McpDescription("Number of files to skip before reading. Default 0.")
-		offset: Int = 0,
-		@McpDescription("Maximum number of files to return. Default 50.")
-		limit: Int = 50,
 		@McpDescription("1-based line number to start reading from in each file. Default 1.")
 		start_line: Int = 1,
 		@McpDescription("Maximum number of lines to return per file. Default 2000.")
@@ -58,12 +50,9 @@ class BatchFileTextToolset : McpToolset {
 		val project = currentCoroutineContext().project
 		val tokens = patterns.map { it.trim() }.filter { it.isNotEmpty() }
 		if (tokens.isEmpty()) mcpFail("No patterns provided.")
-		if (offset < 0) mcpFail("offset must be >= 0.")
-		if (limit <= 0) mcpFail("limit must be > 0.")
 		if (start_line <= 0) mcpFail("start_line must be > 0.")
 		if (max_lines <= 0) mcpFail("max_lines must be > 0.")
 
-		val resolutionCap = offset + limit
 		val seen = HashSet<VirtualFile>()
 		val entries = mutableListOf<Pair<String, VirtualFile>>()
 		var hitMax = false
@@ -71,7 +60,7 @@ class BatchFileTextToolset : McpToolset {
 
 		for (token in tokens) {
 			if (hitMax) break
-			val remaining = resolutionCap - entries.size
+			val remaining = 50 - entries.size
 			if (remaining <= 0) {
 				hitMax = true
 				break
@@ -90,16 +79,11 @@ class BatchFileTextToolset : McpToolset {
 			}
 		}
 
-		entries.sortBy { it.first }
-		val fromIndex = min(offset, entries.size)
-		val toIndex = min(offset + limit, entries.size)
-		val page = entries.subList(fromIndex, toIndex)
-
 		val sb = StringBuilder()
 		var filesRead = 0
 		var skipped = missingPaths
 
-		for ((path, vf) in page) {
+		for ((path, vf) in entries) {
 			val mark = sb.length
 			if (appendFileContent(sb, path, vf, start_line, max_lines)) {
 				sb.appendLine()
@@ -134,7 +118,7 @@ class BatchFileTextToolset : McpToolset {
 			if (lineCount == 0 || startLine > lineCount) return@readAction false
 			val indent = detectIndentation(document)
 			sb.append("=== ").append(path).append(" (").append(indent).appendLine(") ===")
-			val endLine = min(startLine + maxLines - 1, lineCount)
+			val endLine = (startLine + maxLines - 1).coerceAtMost(lineCount)
 			val chars = document.immutableCharSequence
 			for (lineNumber in startLine..endLine) {
 				val lineIndex = lineNumber - 1
