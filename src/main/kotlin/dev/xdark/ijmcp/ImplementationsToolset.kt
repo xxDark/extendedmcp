@@ -92,8 +92,8 @@ class ImplementationsToolset : McpToolset {
 
 		data class ImplEntry(val name: String, val location: String, val context: String)
 
-		val seen = mutableSetOf<String>()
 		val implementations = readAction {
+			val seen = mutableSetOf<String>()
 			definitions.mapNotNull { element ->
 				val name = (element as? PsiNamedElement)?.name ?: return@mapNotNull null
 				val loc = formatLocation(project, element)
