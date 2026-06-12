@@ -12,7 +12,6 @@ import com.intellij.openapi.application.readAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.editor.RangeMarker
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import com.intellij.openapi.progress.ProgressManager
 import dev.xdark.ijmcp.util.resolveFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -48,70 +47,6 @@ private fun findMismatchDiagnostic(documentText: String, searchText: String): St
 
 private fun String.escapeWhitespace() = replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
 
-private data class NormalizedMatch(val start: Int, val end: Int, val adjustedNewText: String)
-
-private class DocumentLines(text: String) {
-	val lines: List<String> = text.split('\n')
-	val strippedLines: List<String> = lines.map { it.trimStart() }
-	val lineOffsets: IntArray = IntArray(lines.size).also { offsets ->
-		var off = 0
-		for (i in lines.indices) {
-			offsets[i] = off
-			off += lines[i].length + 1
-		}
-	}
-}
-
-private fun findNormalizedMatch(
-	doc: DocumentLines,
-	searchText: String,
-	newText: String,
-	startFrom: Int,
-): NormalizedMatch? {
-	val endsWithNewline = searchText.endsWith('\n')
-	val searchLines = (if (endsWithNewline) searchText.dropLast(1) else searchText).split('\n')
-	if (searchLines.isEmpty()) return null
-
-	val strippedSearch = searchLines.map { it.trimStart() }
-
-	val startLineIdx = if (startFrom == 0) 0 else doc.lineOffsets.indexOfLast { it <= startFrom }.coerceAtLeast(0)
-
-	outer@ for (i in startLineIdx..doc.lines.size - searchLines.size) {
-		ProgressManager.checkCanceled()
-		for (j in searchLines.indices) {
-			if (doc.strippedLines[i + j] != strippedSearch[j]) continue@outer
-		}
-
-		val matchStart = doc.lineOffsets[i]
-		val lastIdx = i + searchLines.size - 1
-		val matchEnd = if (endsWithNewline && lastIdx + 1 < doc.lines.size) {
-			doc.lineOffsets[lastIdx + 1]
-		} else {
-			doc.lineOffsets[lastIdx] + doc.lines[lastIdx].length
-		}
-
-		val nonBlankPairs = searchLines.withIndex().filter { it.value.isNotBlank() }
-		val adjustedNewText = if (nonBlankPairs.isNotEmpty()) {
-			val minEntry = nonBlankPairs.minBy { it.value.length - it.value.trimStart().length }
-			val searchPrefix = minEntry.value.takeWhile { it.isWhitespace() }
-			val docPrefix = doc.lines[i + minEntry.index].takeWhile { it.isWhitespace() }
-			if (searchPrefix != docPrefix) {
-				val newEndsWithNewline = newText.endsWith('\n')
-				val newLines = (if (newEndsWithNewline) newText.dropLast(1) else newText).split('\n')
-				val adjusted = newLines.joinToString("\n") { line ->
-					if (line.startsWith(searchPrefix)) {
-						docPrefix + line.removePrefix(searchPrefix)
-					} else line
-				}
-				if (newEndsWithNewline) adjusted + '\n' else adjusted
-			} else newText
-		} else newText
-
-		return NormalizedMatch(matchStart, matchEnd, adjustedNewText)
-	}
-	return null
-}
-
 class BatchReplaceTextToolset : McpToolset {
 
 	@Serializable
@@ -133,7 +68,9 @@ class BatchReplaceTextToolset : McpToolset {
         |so earlier replacements don't invalidate later ones even if they shift text.
         |
         |Returns a summary of replacements applied per file.
+        |old_text is matched exactly — all whitespace and indentation are significant.
         |Fails if any replacement's old_text is not found in the target file.
+        |On failure, the error pinpoints the closest candidate and the exact offset where it diverges.
     """
 	)
 	suspend fun batch_replace_text_in_file(
@@ -155,7 +92,6 @@ class BatchReplaceTextToolset : McpToolset {
 				readAction {
 					marked.clear()
 					val text = document.text
-					val doc = DocumentLines(text)
 					for (r in fileReplacements) {
 						if (r.old_text.isEmpty()) mcpFail("$filePath: old_text must not be empty")
 
@@ -163,17 +99,7 @@ class BatchReplaceTextToolset : McpToolset {
 						var currentStart = 0
 						while (true) {
 							val idx = text.indexOf(r.old_text, currentStart)
-							if (idx < 0) {
-								val normalized = findNormalizedMatch(doc, r.old_text, r.new_text, currentStart)
-								if (normalized != null) {
-									found = true
-									marked.add(document.createRangeMarker(normalized.start, normalized.end, true) to normalized.adjustedNewText)
-									if (!r.replace_all) break
-									currentStart = normalized.end
-									continue
-								}
-								break
-							}
+							if (idx < 0) break
 							found = true
 							marked.add(document.createRangeMarker(idx, idx + r.old_text.length, true) to r.new_text)
 							if (!r.replace_all) break
