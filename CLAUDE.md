@@ -39,9 +39,15 @@ src/main/kotlin/dev/xdark/ijmcp/
   ShortenReferencesToolset.kt  — shorten_references
   ReformatToolset.kt           — reformat_files
   ReplaceLinesToolset.kt       — replace_lines, batch_replace_lines
+  BatchReplaceTextToolset.kt   — batch_replace_text_in_file
   ToolFilterToolset.kt         — list_tools_filter
-  FilteredToolsProvider.kt     — McpToolsProvider that replaces built-in, applies filter
-  ToolFilterState.kt           — Persists disabled tool names
+  ToolListService.kt           — App service: enumerates registered tools + built-in tool names (classloader check)
+  ArgNormalizingFilterProvider.kt — McpToolFilterProvider: disables filtered tools + wraps tools for arg normalization
+  ArgNormalizingMcpTool.kt     — McpTool wrapper that runs ArgumentNormalizers before delegating to the real tool
+  ArgumentNormalizer.kt        — fun interface: normalize(args, propertiesSchema)
+  UnknownParameterNormalizer.kt — Fails fast (mcpFail) on unknown parameter names
+  StringEncodedArrayNormalizer.kt — Parses JSON-string args into arrays when the schema expects an array
+  ToolFilterState.kt           — Persists disabled tool names (mcpToolFilter.xml)
   ToolFilterAction.kt          — Tools menu UI for toggling tools
   McpMetricsService.kt         — Tool call counting + persistence
   McpMetricsAction.kt          — Tools menu UI for viewing metrics
@@ -103,15 +109,20 @@ Add to `plugin.xml`:
 - **Reference resolution**: `psiFile.findReferenceAt(offset)` — NOT `element.references` (doesn't work for Kotlin)
 
 ## Tool Filter Architecture
-`FilteredToolsProvider` intercepts the MCP tool list at the `McpToolsProvider` extension point level:
-1. On first `getTools()` call, caches tools from non-toolset providers (built-in tools like `get_file_text_by_path`)
-2. Unregisters ALL other `McpToolsProvider` extensions (including `ReflectionToolsProvider`)
-3. Becomes the sole provider — reads `McpToolset.EP` directly via `asTools()` and applies the filter
-4. `ToolFilterState` persists disabled tool names in `mcpToolFilter.xml`
-5. After toggling, `triggerRefresh()` pokes the EP (deprecated register+unregister of dummy) to cause `getMcpTools()` re-evaluation
-6. MCP server sends `tools/list_changed` notification — clients update automatically
+`ArgNormalizingFilterProvider` implements the `com.intellij.mcpserver.McpToolFilterProvider` extension point — the platform-supported way to modify the live tool list (replaces the old "unregister all other `McpToolsProvider`s" hack):
+1. `getFilters()` returns two `McpToolFilter`s applied in order:
+   - `ToolDisablingFilter` — reads disabled names from `ToolFilterState` and returns `DisallowMcpTools(...)` for them
+   - `ArgNormalizingFilter` — wraps each remaining tool in `ArgNormalizingMcpTool`, which runs the `ArgumentNormalizer` chain (`UnknownParameterNormalizer` then `StringEncodedArrayNormalizer`) on incoming args before calling the real tool
+2. `getUpdates()` returns a `Flow<Unit>` backed by a `MutableSharedFlow`; the platform collects it and re-evaluates the tool list on each emission
+3. `ToolFilterState` (APP-level service) persists disabled tool names in `mcpToolFilter.xml`
+4. After the dialog's OK (`doOKAction`), `ArgNormalizingFilterProvider.triggerUpdate()` emits on the flow → platform sends `tools/list_changed` → clients refresh automatically
+5. `ToolListService` (APP-level service) enumerates tools via `McpToolsProvider.EP` and identifies built-in tools by classloader comparison (`toolset::class.java.classLoader != ourClassLoader`) — used by the filter dialog and `list_tools_filter`
 
-User toggles tools via **Tools > MCP Tool Filter** (checkbox dialog). The `list_tools_filter` MCP tool provides read-only visibility.
+### Argument normalizers (`ArgNormalizingMcpTool`)
+- `UnknownParameterNormalizer` — `mcpFail`s when args contain keys not in the tool's `propertiesSchema`, surfacing the valid parameter names (catches model param-name typos that would otherwise silently use defaults).
+- `StringEncodedArrayNormalizer` — when the schema declares a param as `"type": "array"` but the model sent a JSON string starting with `[`, parses it into a real `JsonArray`. (This is why `read_files`/other list params accept a `["..."]` string but reject a bare path string.)
+
+User toggles tools via **Tools > MCP Tool Filter** (checkbox dialog: search, bulk enable/disable, built-in on/off, copy/apply JSON config, per-tool details popup). The `list_tools_filter` MCP tool provides read-only visibility.
 
 ## Gotchas
 

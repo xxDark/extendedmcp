@@ -142,16 +142,12 @@ private class ToolFilterDialog : DialogWrapper(null) {
 				}
 			})
 		}
-		panel.add(searchField, BorderLayout.NORTH)
-
 		val buttonRow1 = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0)).apply {
 			add(createButton("Enable All") { setAll(true) })
 			add(createButton("Disable All") { setAll(false) })
 			add(Box.createHorizontalStrut(JBUI.scale(8)))
 			add(createButton("Built-in On") { setBySource(builtIn = true, enabled = true) })
 			add(createButton("Built-in Off") { setBySource(builtIn = true, enabled = false) })
-			add(Box.createHorizontalStrut(JBUI.scale(8)))
-			add(createButton("Reset") { setAll(true) })
 		}
 
 		val buttonRow2 = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0)).apply {
