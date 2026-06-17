@@ -18,35 +18,29 @@ import com.intellij.openapi.application.EDT
 import com.intellij.openapi.externalSystem.model.execution.ExternalSystemTaskExecutionSettings
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil
 import com.intellij.openapi.util.Key
+import dev.xdark.ijmcp.settings.ConfigurableToolset
+import dev.xdark.ijmcp.settings.SettingsHolder
 import kotlinx.coroutines.*
 import org.jetbrains.plugins.gradle.util.GradleConstants
 
-class GradleToolset : McpToolset {
+class GradleToolset : McpToolset, ConfigurableToolset {
 
-	companion object {
-		private val NOISY_LINE = Regex(
-			"""^(""" +
-					"""Downloading |Download |\s*>\s*(Downloading|Download)\b|\.+$""" +  // download
-					"""|[<>]\s+\S+\.\S+.*[KMB]?/s\s*$""" +  // progress
-					"""|Starting Gradle Daemon""" +
-					"""|Gradle Daemon started in """ +
-					"""|Consider enabling configuration cache""" +
-					"""|The Daemon will expire """ +
-					"""|The project memory settings """ +
-					"""|The daemon will restart """ +
-					"""|These settings can be adjusted """ +
-					"""|The currently configured max heap """ +
-					"""|For more information on how to set these """ +
-					"""|To disable this warning, set """ +
-					"""|Daemon will be stopped """ +
-					""")"""
-		)
+	private val mySettings = GradleSettings()
+
+	override val settingsTitle: String get() = "Gradle"
+	override val settingsHolder: SettingsHolder get() = mySettings
+
+	private fun compileNoisyRegex(patterns: List<String>): Regex? {
+		val nonEmpty = patterns.filter { it.isNotEmpty() }
+		if (nonEmpty.isEmpty()) return null
+		return Regex("^(" + nonEmpty.joinToString("|") + ")")
 	}
 
-	private fun isNoisyLine(line: String): Boolean {
+	private fun isNoisyLine(line: String, noisyRegex: Regex?): Boolean {
+		if (noisyRegex == null) return false
 		val trimmed = line.trim()
 		if (trimmed.isEmpty()) return false
-		return NOISY_LINE.containsMatchIn(trimmed)
+		return noisyRegex.containsMatchIn(trimmed)
 	}
 
 	@McpTool
@@ -90,6 +84,7 @@ class GradleToolset : McpToolset {
 
 		val exitCodeDeferred = CompletableDeferred<Int>()
 		val outputBuilder = StringBuilder()
+		val noisyRegex = compileNoisyRegex(mySettings.noisyPatterns)
 
 		withContext(Dispatchers.EDT) {
 			val runner = ProgramRunner.getRunner(executor.id, runnerAndConfigSettings.configuration)
@@ -111,7 +106,7 @@ class GradleToolset : McpToolset {
 						override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
 							if (outputType == ProcessOutputTypes.SYSTEM) return
 							val text = event.text
-							if (text.lines().all { isNoisyLine(it) || it.isEmpty() }) return
+							if (text.lines().all { isNoisyLine(it, noisyRegex) || it.isEmpty() }) return
 							outputBuilder.append(text)
 						}
 

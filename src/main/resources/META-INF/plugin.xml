@@ -48,6 +48,10 @@
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.BatchReplaceTextToolset"/>
         <mcpServer.mcpToolset implementation="dev.xdark.ijmcp.ToolFilterToolset"/>
         <mcpServer.mcpToolFilterProvider implementation="dev.xdark.ijmcp.ArgNormalizingFilterProvider"/>
+        <applicationConfigurable parentId="tools"
+                                 id="dev.xdark.ijmcp.settings"
+                                 displayName="MCP Toolset Settings"
+                                 instance="dev.xdark.ijmcp.settings.McpToolSettingsConfigurable"/>
     </extensions>
 
     <applicationListeners>

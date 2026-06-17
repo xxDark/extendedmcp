@@ -9,6 +9,12 @@ Registers `McpToolset` implementations via the `com.intellij.mcpServer.mcpToolse
 src/main/kotlin/dev/xdark/ijmcp/
   util/PsiUtil.kt              — Shared helpers: resolveFile, formatLocation, findSymbolByName, etc.
   util/FilePatternResolver.kt  — Glob/literal file pattern resolution, PSI batch resolution
+  settings/Setting.kt          — Setting<T> delegate, setting() factory, SettingsHolder base
+  settings/ConfigurableToolset.kt — Opt-in interface: settingsTitle + settingsHolder
+  settings/ToolSettingsService.kt — App-level persistence (ijMcpToolSettings.xml) + SettingCodec
+  settings/SettingsUiGenerator.kt — editorFor(): reflective Setting → Swing control by KType
+  settings/McpToolSettingsConfigurable.kt — Settings > Tools > MCP Toolset Settings UI
+  GradleSettings.kt            — Gradle settings bean (noisyPatterns) — first ConfigurableToolset consumer
   FindUsagesToolset.kt         — find_usages
   QuickFixToolset.kt           — apply_quick_fix
   ExtendedRefactoringToolset.kt — optimize_imports
@@ -107,6 +113,43 @@ Add to `plugin.xml`:
 - **Write PSI on EDT (refactoring)**: `withContext(Dispatchers.EDT) { writeIntentReadAction { ... } }`
 - **Write PSI on EDT (direct PSI add/remove)**: `withContext(Dispatchers.EDT) { WriteCommandAction.runWriteCommandAction(project) { ... } }`
 - **Reference resolution**: `psiFile.findReferenceAt(offset)` — NOT `element.references` (doesn't work for Kotlin)
+
+## Toolset Settings
+
+Declarative, app-global, UI-only user preferences for a toolset (NOT for overriding per-call
+tool parameters — those stay MCP args). A toolset opts in by implementing `ConfigurableToolset`
+and declaring settings via Kotlin property delegation:
+```kotlin
+class GradleSettings : SettingsHolder() {
+    val noisyPatterns by setting(
+        value = listOf(/* defaults */),
+        label = "Suppressed output patterns",
+        description = "...",            // optional; min/max for Int, multiline for String
+    )
+}
+
+class GradleToolset : McpToolset, ConfigurableToolset {
+    private val mySettings = GradleSettings()
+    override val settingsTitle get() = "Gradle"
+    override val settingsHolder get() = mySettings
+    // read anywhere: mySettings.noisyPatterns
+}
+```
+- **Declaration**: `val x by setting(value = <default>, label, description, min, max, multiline)`.
+  No annotations, no per-type subclasses. `setting()` captures the declared type via `typeOf<T>()`.
+- **Supported types**: Boolean, Int (min/max), String (`multiline` → text area), Enum,
+  `List<String>` (always a multi-line text area, one entry per line).
+- **Read**: just read the delegated property; the holder hydrates from persistence lazily on
+  first read (`SettingsHolder.ensureHydrated`).
+- **Persistence**: `ToolSettingsService` (`@Service(APP)`) stores `"<classFQN>.<name>" -> encoded`
+  in `ijMcpToolSettings.xml`, only when a value differs from its default.
+- **UI**: `McpToolSettingsConfigurable` (Settings > Tools > MCP Toolset Settings) generates the
+  form reflectively via `editorFor()`; the toolset and the dialog share the same holder instance,
+  so applied edits are visible to subsequent tool calls. No plugin.xml change needed to add a
+  setting to an already-registered toolset.
+- **No `kotlin-reflect`**: dispatch uses only `KType` classifier-identity comparison and
+  `KClass.java`. Do NOT call `.members`/`.supertypes`/`.createInstance` (they throw
+  `KotlinReflectionNotSupportedError` without the lib).
 
 ## Tool Filter Architecture
 `ArgNormalizingFilterProvider` implements the `com.intellij.mcpserver.McpToolFilterProvider` extension point — the platform-supported way to modify the live tool list (replaces the old "unregister all other `McpToolsProvider`s" hack):
