@@ -79,18 +79,17 @@ class FindUsagesToolset : McpToolset {
 					?: mcpFail("Class '$qualified_class_name' not found")
 				(cls.navigationElement as? PsiClass) ?: cls
 			}
-			val classRefFiles = readAction {
+			readAction {
 				val files = mutableSetOf<com.intellij.openapi.vfs.VirtualFile>()
 				ReferencesSearch.search(containingClass, baseScope).forEach(com.intellij.util.Processor { ref ->
 					ref.element.containingFile?.virtualFile?.let { files.add(it) }
 					true // collect all
 				})
-				files
+				if (files.isEmpty()) {
+					mcpFail("No references to class '$qualified_class_name' found in the specified scope")
+				}
+				GlobalSearchScope.filesScope(project, files)
 			}
-			if (classRefFiles.isEmpty()) {
-				mcpFail("No references to class '$qualified_class_name' found in the specified scope")
-			}
-			GlobalSearchScope.filesScope(project, classRefFiles)
 		} else {
 			baseScope
 		}
