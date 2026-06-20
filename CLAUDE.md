@@ -52,7 +52,9 @@ src/main/kotlin/dev/xdark/ijmcp/
   ArgNormalizingMcpTool.kt     — McpTool wrapper that runs ArgumentNormalizers before delegating to the real tool
   ArgumentNormalizer.kt        — fun interface: normalize(args, propertiesSchema)
   UnknownParameterNormalizer.kt — Fails fast (mcpFail) on unknown parameter names
-  StringEncodedArrayNormalizer.kt — Parses JSON-string args into arrays when the schema expects an array
+  StringEncodedJsonNormalizer.kt — Parses a JSON-string arg into a real array/object when the schema expects one; mcpFails on a string that opens like a container but is malformed
+  SingleElementArrayNormalizer.kt — Wraps a lone value into a single-element array when the schema expects an array and the value validates as one element
+  JsonSchemaValidator.kt       — Minimal recursive validator for the MCP JSON-Schema subset (type/items/properties/required/enum); used by SingleElementArrayNormalizer
   ToolFilterState.kt           — Persists disabled tool names (mcpToolFilter.xml)
   ToolFilterAction.kt          — Tools menu UI for toggling tools
   McpMetricsService.kt         — Tool call counting + persistence
@@ -155,7 +157,7 @@ class GradleToolset : McpToolset, ConfigurableToolset {
 `ArgNormalizingFilterProvider` implements the `com.intellij.mcpserver.McpToolFilterProvider` extension point — the platform-supported way to modify the live tool list (replaces the old "unregister all other `McpToolsProvider`s" hack):
 1. `getFilters()` returns two `McpToolFilter`s applied in order:
    - `ToolDisablingFilter` — reads disabled names from `ToolFilterState` and returns `DisallowMcpTools(...)` for them
-   - `ArgNormalizingFilter` — wraps each remaining tool in `ArgNormalizingMcpTool`, which runs the `ArgumentNormalizer` chain (`UnknownParameterNormalizer` then `StringEncodedArrayNormalizer`) on incoming args before calling the real tool
+   - `ArgNormalizingFilter` — wraps each remaining tool in `ArgNormalizingMcpTool`, which runs the `ArgumentNormalizer` chain (`UnknownParameterNormalizer` → `StringEncodedJsonNormalizer` → `SingleElementArrayNormalizer`) on incoming args before calling the real tool
 2. `getUpdates()` returns a `Flow<Unit>` backed by a `MutableSharedFlow`; the platform collects it and re-evaluates the tool list on each emission
 3. `ToolFilterState` (APP-level service) persists disabled tool names in `mcpToolFilter.xml`
 4. After the dialog's OK (`doOKAction`), `ArgNormalizingFilterProvider.triggerUpdate()` emits on the flow → platform sends `tools/list_changed` → clients refresh automatically
@@ -163,7 +165,8 @@ class GradleToolset : McpToolset, ConfigurableToolset {
 
 ### Argument normalizers (`ArgNormalizingMcpTool`)
 - `UnknownParameterNormalizer` — `mcpFail`s when args contain keys not in the tool's `propertiesSchema`, surfacing the valid parameter names (catches model param-name typos that would otherwise silently use defaults).
-- `StringEncodedArrayNormalizer` — when the schema declares a param as `"type": "array"` but the model sent a JSON string starting with `[`, parses it into a real `JsonArray`. (This is why `read_files`/other list params accept a `["..."]` string but reject a bare path string.)
+- `StringEncodedJsonNormalizer` — when the schema declares a param as `"type": "array"` (or `"object"`) but the model sent a JSON string whose content opens with `[` (or `{`), parses it into a real `JsonArray`/`JsonObject`. If the content opens like a container but fails to parse (e.g. a truncated array), it `mcpFail`s with the parse error and offset instead of letting the deserializer throw the cryptic `Expected JsonArray, but had JsonLiteral`.
+- `SingleElementArrayNormalizer` — when the schema expects an array, the sent value doesn't validate against it, but wrapping it as a one-element array does (checked via `JsonSchemaValidator`), rewrites the arg to `[value]`. Runs after `StringEncodedJsonNormalizer` so a string-encoded array is decoded first rather than wrapped as a lone string element. (This is why `read_files`/other list params accept a bare path string, a `["..."]` string, or a real array.)
 
 User toggles tools via **Tools > MCP Tool Filter** (checkbox dialog: search, bulk enable/disable, built-in on/off, copy/apply JSON config, per-tool details popup). The `list_tools_filter` MCP tool provides read-only visibility.
 

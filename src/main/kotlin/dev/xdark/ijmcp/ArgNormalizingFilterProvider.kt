@@ -13,11 +13,18 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
 class ArgNormalizingFilterProvider : McpToolFilterProvider {
-	override fun getFilters(clientInfo: Implementation?, sessionOptions: McpServerService.McpSessionOptions?): List<McpToolFilter> {
+	override fun getFilters(
+		clientInfo: Implementation?,
+		sessionOptions: McpServerService.McpSessionOptions?
+	): List<McpToolFilter> {
 		return listOf(ToolDisablingFilter, ArgNormalizingFilter)
 	}
 
-	override fun getUpdates(clientInfo: Implementation?, scope: CoroutineScope, sessionOptions: McpServerService.McpSessionOptions?): Flow<Unit> {
+	override fun getUpdates(
+		clientInfo: Implementation?,
+		scope: CoroutineScope,
+		sessionOptions: McpServerService.McpSessionOptions?
+	): Flow<Unit> {
 		return updateFlow.asSharedFlow()
 	}
 
@@ -30,7 +37,8 @@ class ArgNormalizingFilterProvider : McpToolFilterProvider {
 	}
 
 	private object ArgNormalizingFilter : McpToolFilter {
-		private val normalizers = listOf(UnknownParameterNormalizer(), StringEncodedArrayNormalizer())
+		private val normalizers =
+			listOf(UnknownParameterNormalizer(), StringEncodedJsonNormalizer(), SingleElementArrayNormalizer())
 
 		override fun modify(context: McpToolFilterContext): McpToolFilterModification {
 			val wrapped = context.allowedTools.map { ArgNormalizingMcpTool(it, normalizers) }.toSet()
