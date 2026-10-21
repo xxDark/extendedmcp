@@ -2,12 +2,10 @@
 
 package dev.xdark.ijmcp.tools.refactor
 
-import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
-import com.intellij.codeInsight.daemon.impl.DaemonCodeAnalyzerImpl
-import com.intellij.codeInsight.daemon.impl.DaemonProgressIndicator
 import com.intellij.codeInsight.daemon.impl.HighlightInfo
-import com.intellij.codeInsight.daemon.impl.HighlightingSessionImpl
+import com.intellij.codeInsight.daemon.impl.MainPassesRunner
 import com.intellij.codeInsight.intention.IntentionAction
+import com.intellij.codeInsight.intention.impl.ShowIntentionActionsHandler
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
@@ -19,8 +17,7 @@ import com.intellij.openapi.application.writeIntentReadAction
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.progress.jobToIndicator
-import com.intellij.openapi.util.ProperTextRange
-import com.intellij.psi.PsiManager
+import com.intellij.openapi.progress.util.ProgressIndicatorBase
 import com.intellij.util.DocumentUtil
 import dev.xdark.ijmcp.util.resolveFile
 import kotlinx.coroutines.*
@@ -71,36 +68,21 @@ class QuickFixToolset : McpToolset {
 			off
 		}
 
-		// Run highlighting passes to get HighlightInfo (same pattern as AnalysisToolset)
-		val collectedInfos = mutableListOf<HighlightInfo>()
-		withTimeoutOrNull(timeout.toLong()) {
-			coroutineScope {
-				val psiFile = readAction { PsiManager.getInstance(project).findFile(resolved.virtualFile) }
-					?: mcpFail("Cannot find PSI file: $filePath")
-				val daemonIndicator = DaemonProgressIndicator()
-				val range = ProperTextRange(0, resolved.document.textLength)
+		// MainPassesRunner yields to write actions; a bare runMainPasses holds a blocking read lock and freezes the UI
+		val highlightInfos: List<HighlightInfo> = withTimeoutOrNull(timeout.toLong()) {
+			jobToIndicator(coroutineContext.job, ProgressIndicatorBase()) {
+				MainPassesRunner(project, "", null).runMainPasses(listOf(resolved.virtualFile))
+			}.values.firstOrNull()
+		}.orEmpty()
 
-				jobToIndicator(coroutineContext.job, daemonIndicator) {
-					HighlightingSessionImpl.runInsideHighlightingSession(
-						psiFile,
-						null,
-						range,
-						false
-					) { _ ->
-						val codeAnalyzer = DaemonCodeAnalyzer.getInstance(project) as DaemonCodeAnalyzerImpl
-						val infos = codeAnalyzer.runMainPasses(psiFile, resolved.document, daemonIndicator)
-						collectedInfos.addAll(infos)
-					}
-				}
-			}
-		}
-		val highlightInfos: List<HighlightInfo> = collectedInfos
-
-		// Collect quick fixes at offset
+		// Collect quick fixes at offset. Passes run in parallel and report infos in a different order on
+		// every call, so sort them: fixIndex must point at the fix the previous listing showed.
 		val fixActions: List<Pair<IntentionAction, HighlightInfo>> = readAction {
 			highlightInfos.filter { info: HighlightInfo ->
 				info.startOffset <= offset && offset <= info.endOffset
-			}.flatMap { info: HighlightInfo ->
+			}.sortedWith(
+				compareBy<HighlightInfo>({ it.startOffset }, { it.endOffset }, { it.description })
+			).flatMap { info: HighlightInfo ->
 				val fixes = mutableListOf<Pair<IntentionAction, HighlightInfo>>()
 				info.findRegisteredQuickFix { descriptor, range ->
 					val action = descriptor.action
@@ -140,16 +122,20 @@ class QuickFixToolset : McpToolset {
 		val action = actionPair.first
 		val description = action.text
 
-		withContext(Dispatchers.EDT) {
+		val applied = withContext(Dispatchers.EDT) {
 			writeIntentReadAction {
-				val editor = EditorFactory.getInstance().createEditor(resolved.document)
+				val editor = EditorFactory.getInstance().createEditor(resolved.document, project)
 				try {
 					editor.caretModel.moveToOffset(offset)
-					action.invoke(project, editor, resolved.psiFile)
+					// Wraps the fix in a command and, when it asks for one, a write action — as the IDE does
+					ShowIntentionActionsHandler.chooseActionAndInvoke(resolved.psiFile, editor, action, description)
 				} finally {
 					EditorFactory.getInstance().releaseEditor(editor)
 				}
 			}
+		}
+		if (!applied) {
+			mcpFail("Fix '$description' is not available at $line:$column anymore")
 		}
 
 		withContext(Dispatchers.EDT) {

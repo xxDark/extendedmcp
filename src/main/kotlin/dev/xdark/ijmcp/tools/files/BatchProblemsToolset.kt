@@ -2,11 +2,8 @@
 
 package dev.xdark.ijmcp.tools.files
 
-import com.intellij.codeInsight.daemon.DaemonCodeAnalyzer
-import com.intellij.codeInsight.daemon.impl.DaemonCodeAnalyzerImpl
-import com.intellij.codeInsight.daemon.impl.DaemonProgressIndicator
 import com.intellij.codeInsight.daemon.impl.HighlightInfo
-import com.intellij.codeInsight.daemon.impl.HighlightingSessionImpl
+import com.intellij.codeInsight.daemon.impl.MainPassesRunner
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.mcpserver.McpToolset
 import com.intellij.mcpserver.annotations.McpDescription
@@ -17,8 +14,8 @@ import com.intellij.mcpserver.util.awaitExternalChangesAndIndexing
 import com.intellij.openapi.application.readAction
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.progress.jobToIndicator
+import com.intellij.openapi.progress.util.ProgressIndicatorBase
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.util.ProperTextRange
 import com.intellij.openapi.util.TextRange
 import dev.xdark.ijmcp.util.PsiFileEntry
 import dev.xdark.ijmcp.util.resolveFilesByPatterns
@@ -116,23 +113,14 @@ class BatchProblemsToolset : McpToolset {
 		entry: PsiFileEntry,
 		minSeverity: HighlightSeverity,
 	): List<Problem> {
-		val collectedInfos = mutableListOf<HighlightInfo>()
-		val daemonIndicator = DaemonProgressIndicator()
-		val range = readAction { ProperTextRange(0, entry.document.textLength) }
-
-		jobToIndicator(currentCoroutineContext().job, daemonIndicator) {
-			HighlightingSessionImpl.runInsideHighlightingSession(
-				entry.psiFile, null, range, false
-			) { session ->
-				(session as HighlightingSessionImpl).setMinimumSeverity(minSeverity)
-				val codeAnalyzer = DaemonCodeAnalyzer.getInstance(project) as DaemonCodeAnalyzerImpl
-				val infos = codeAnalyzer.runMainPasses(entry.psiFile, entry.document, daemonIndicator)
-				collectedInfos.addAll(infos)
-			}
-		}
+		// MainPassesRunner cancels and retries the passes when a write action is requested. A bare
+		// DaemonCodeAnalyzerImpl.runMainPasses holds a blocking read lock and freezes the UI on slow inspections.
+		val infos = jobToIndicator(currentCoroutineContext().job, ProgressIndicatorBase()) {
+			MainPassesRunner(project, "", null).runMainPasses(listOf(entry.psiFile.virtualFile), minSeverity)
+		}.values.firstOrNull().orEmpty()
 
 		return readAction {
-			collectedInfos.mapNotNull { info ->
+			infos.mapNotNull { info ->
 				if (info.description != null && info.severity.myVal >= minSeverity.myVal) {
 					createProblem(entry.document, info)
 				} else {

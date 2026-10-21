@@ -8,6 +8,7 @@ import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.readAction
+import com.intellij.openapi.application.smartReadAction
 import com.intellij.openapi.project.Project
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
@@ -95,7 +96,7 @@ class GetDocumentationToolset : McpToolset {
 		symbolName: String,
 		memberIndex: Int,
 	): List<DocEntry> {
-		return readAction {
+		return smartReadAction(project) {
 			val scope = GlobalSearchScope.allScope(project)
 			val compiledClass = JavaPsiFacade.getInstance(project).findClass(qualifiedClassName, scope)
 				?: mcpFail("Class '$qualifiedClassName' not found")

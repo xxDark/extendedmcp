@@ -7,7 +7,7 @@ import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
-import com.intellij.openapi.application.readAction
+import com.intellij.openapi.application.smartReadAction
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiPackage
@@ -41,7 +41,7 @@ class ListPackageClassesToolset : McpToolset {
 			else -> GlobalSearchScope.allScope(project)
 		}
 
-		return readAction {
+		return smartReadAction(project) {
 			val psiPackage = JavaPsiFacade.getInstance(project).findPackage(packageName)
 				?: mcpFail("Package '$packageName' not found")
 

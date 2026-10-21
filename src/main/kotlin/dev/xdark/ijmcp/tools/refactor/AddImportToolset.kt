@@ -10,6 +10,7 @@ import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.readAction
+import com.intellij.openapi.application.smartReadAction
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.psi.JavaPsiFacade
@@ -102,7 +103,7 @@ class AddImportToolset : McpToolset {
 			val memberName = fqName.substring(lastDot + 1)
 
 			// Check if already imported
-			val alreadyImported = readAction {
+			val alreadyImported = smartReadAction(project) {
 				javaFile.importList?.importStaticStatements?.any {
 					it.resolveTargetClass()?.qualifiedName == className && it.referenceName == memberName
 				} ?: false
@@ -134,7 +135,7 @@ class AddImportToolset : McpToolset {
 			}
 
 			// Direct PSI manipulation — bypasses ImportFilter which can silently skip imports
-			val psiClass = readAction {
+			val psiClass = smartReadAction(project) {
 				JavaPsiFacade.getInstance(project).findClass(fqName, GlobalSearchScope.allScope(project))
 			}
 			withContext(Dispatchers.EDT) {

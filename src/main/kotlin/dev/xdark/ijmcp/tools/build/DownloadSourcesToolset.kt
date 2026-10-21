@@ -10,6 +10,7 @@ import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.readAction
+import com.intellij.openapi.application.smartReadAction
 import com.intellij.openapi.extensions.ExtensionPointName
 import com.intellij.openapi.externalSystem.importing.ImportSpecBuilder
 import com.intellij.openapi.externalSystem.util.ExternalSystemUtil
@@ -52,7 +53,7 @@ class DownloadSourcesToolset : McpToolset {
 	): Any {
 		val project = currentCoroutineContext().project
 
-		val (virtualFile, libraryName) = readAction {
+		val (virtualFile, libraryName) = smartReadAction(project) {
 			val cls = JavaPsiFacade.getInstance(project)
 				.findClass(qualifiedClassName, GlobalSearchScope.allScope(project))
 				?: mcpFail("Class not found: $qualifiedClassName")
@@ -65,15 +66,18 @@ class DownloadSourcesToolset : McpToolset {
 				.filterIsInstance<LibraryOrderEntry>()
 
 			if (entries.isEmpty()) {
-				mcpFail("$qualifiedClassName is not in a library (might be project source)")
+				mcpFail("$qualifiedClassName is not in a project library (project source or build script classpath)")
 			}
 
 			val lib = entries.first().library
 			if (lib != null && lib.getFiles(OrderRootType.SOURCES).isNotEmpty()) {
-				mcpFail("Sources already available for ${lib.name ?: qualifiedClassName}")
+				return@smartReadAction null to (lib.name ?: qualifiedClassName)
 			}
 
 			vf to (lib?.name ?: "unknown library")
+		}
+		if (virtualFile == null) {
+			return "Sources are already attached for $libraryName"
 		}
 
 		val (psiFile, orderEntries) = readAction {

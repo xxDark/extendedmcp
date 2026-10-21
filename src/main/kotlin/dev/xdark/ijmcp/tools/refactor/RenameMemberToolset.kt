@@ -9,18 +9,19 @@ import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.readAction
+import com.intellij.openapi.application.smartReadAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.psi.PsiField
 import com.intellij.psi.PsiMember
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.refactoring.rename.RenameProcessor
 import com.intellij.refactoring.rename.RenameUtil
 import dev.xdark.ijmcp.util.resolveFile
 import dev.xdark.ijmcp.util.resolveTargetElement
+import dev.xdark.ijmcp.util.searchReferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
@@ -135,8 +136,8 @@ class RenameMemberToolset : McpToolset {
 		}
 
 		// Count usages before renaming (for reporting)
-		val usageCount = readAction {
-			ReferencesSearch.search(element, GlobalSearchScope.projectScope(project))
+		val usageCount = smartReadAction(project) {
+			searchReferences(element, GlobalSearchScope.projectScope(project))
 				.findAll()
 				.size
 		}

@@ -9,14 +9,15 @@ import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.readAction
+import com.intellij.openapi.application.smartReadAction
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClassOwner
 import com.intellij.psi.PsiModifier
 import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.refactoring.changeSignature.ChangeSignatureProcessor
 import com.intellij.refactoring.changeSignature.ParameterInfoImpl
 import dev.xdark.ijmcp.util.resolveFile
+import dev.xdark.ijmcp.util.searchReferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
@@ -114,8 +115,8 @@ class ChangeSignatureToolset : McpToolset {
 		}
 
 		// Count call sites before refactoring
-		val callSiteCount = readAction {
-			ReferencesSearch.search(method, GlobalSearchScope.projectScope(project))
+		val callSiteCount = smartReadAction(project) {
+			searchReferences(method, GlobalSearchScope.projectScope(project))
 				.findAll()
 				.size
 		}

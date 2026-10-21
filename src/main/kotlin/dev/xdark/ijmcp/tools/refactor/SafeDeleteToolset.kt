@@ -8,13 +8,15 @@ import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.readAction
+import com.intellij.openapi.application.smartReadAction
+import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.refactoring.safeDelete.SafeDeleteProcessor
 import dev.xdark.ijmcp.util.formatLocation
 import dev.xdark.ijmcp.util.resolveFile
 import dev.xdark.ijmcp.util.resolveTargetElement
+import dev.xdark.ijmcp.util.searchReferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
@@ -51,8 +53,8 @@ class SafeDeleteToolset : McpToolset {
 		}
 
 		// Find usages before attempting delete
-		val usageLocations = readAction {
-			ReferencesSearch.search(element, GlobalSearchScope.projectScope(project))
+		val usageLocations = smartReadAction(project) {
+			searchReferences(element, GlobalSearchScope.projectScope(project))
 				.findAll()
 				.map { ref -> formatLocation(project, ref.element) }
 		}
@@ -65,16 +67,21 @@ class SafeDeleteToolset : McpToolset {
 			}.trimEnd()
 		}
 
-		// Proceed with safe delete
 		withContext(Dispatchers.EDT) {
-			val processor = SafeDeleteProcessor.createInstance(
-				project,
-				null, // prepareSuccessfulCallback
-				arrayOf(element),
-				searchInComments,
-				searchInNonJavaFiles,
-			)
-			processor.run()
+			if (usageLocations.isEmpty()) {
+				val processor = SafeDeleteProcessor.createInstance(
+					project,
+					null, // prepareSuccessfulCallback
+					arrayOf(element),
+					searchInComments,
+					searchInNonJavaFiles,
+				)
+				processor.run()
+			} else {
+				// SafeDeleteProcessor asks about usages in a modal ConflictsDialog, which blocks this call
+				// until someone answers it in the IDE. force already means "delete anyway".
+				WriteCommandAction.runWriteCommandAction(project) { element.delete() }
+			}
 		}
 
 		return if (usageLocations.isEmpty()) {

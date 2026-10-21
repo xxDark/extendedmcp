@@ -7,6 +7,7 @@ import com.intellij.mcpserver.util.projectDirectory
 import com.intellij.mcpserver.util.relativizeIfPossible
 import com.intellij.mcpserver.util.resolveInProject
 import com.intellij.openapi.application.readAction
+import com.intellij.openapi.application.smartReadAction
 import com.intellij.openapi.editor.Document
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
@@ -14,8 +15,12 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.*
+import com.intellij.psi.search.SearchScope
+import com.intellij.psi.search.searches.MethodReferencesSearch
+import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.util.DocumentUtil
+import com.intellij.util.Query
 import org.jetbrains.kotlin.psi.KtClassOrObject
 import org.jetbrains.kotlin.psi.KtDeclaration
 
@@ -112,13 +117,13 @@ suspend fun resolveTargetElement(
 			?: mcpFail("Symbol '$symbolName' not found")
 	} else if (line > 0 && column > 0) {
 		val element = findElementAtOffset(resolved.psiFile, resolved.document, line, column)
-		readAction {
+		smartReadAction(resolved.psiFile.project) {
 			// Walk up, trying to resolve references at each level before settling on a named element
 			var current: PsiElement? = element
 			while (current != null) {
 				val ref = current.reference?.resolve()
-				if (ref is PsiNamedElement) return@readAction ref
-				if (current is PsiNamedElement) return@readAction current
+				if (ref is PsiNamedElement) return@smartReadAction ref
+				if (current is PsiNamedElement) return@smartReadAction current
 				current = current.parent
 			}
 			current
@@ -127,6 +132,12 @@ suspend fun resolveTargetElement(
 		mcpFail("Provide either symbolName or line+column")
 	}
 }
+
+// MethodReferencesSearch also runs method-only searchers that ReferencesSearch skips, e.g. the one
+// finding Kotlin property syntax for Java getters (`project.basePath` for getBasePath()).
+fun searchReferences(element: PsiElement, scope: SearchScope): Query<PsiReference> =
+	if (element is PsiMethod) MethodReferencesSearch.search(element, scope, true)
+	else ReferencesSearch.search(element, scope)
 
 fun getContextText(element: PsiElement): String {
 	val file = element.containingFile ?: return ""

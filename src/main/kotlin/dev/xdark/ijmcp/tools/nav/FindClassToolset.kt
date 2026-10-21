@@ -7,7 +7,7 @@ import com.intellij.mcpserver.annotations.McpDescription
 import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
-import com.intellij.openapi.application.readAction
+import com.intellij.openapi.application.smartReadAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.LibraryOrderEntry
@@ -59,7 +59,7 @@ class FindClassToolset : McpToolset {
 		if (maxLines <= 0) mcpFail("maxLines must be > 0")
 		if (startLine < 0) mcpFail("startLine must be >= 0")
 
-		return readAction {
+		return smartReadAction(project) {
 			val found = if (className.contains('.')) {
 				JavaPsiFacade.getInstance(project).findClasses(className, searchScope).toList()
 			} else {

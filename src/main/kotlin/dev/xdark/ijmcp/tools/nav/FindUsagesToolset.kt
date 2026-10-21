@@ -8,16 +8,16 @@ import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.readAction
+import com.intellij.openapi.application.smartReadAction
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.psi.*
 import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.util.Processor
 import dev.xdark.ijmcp.util.formatLocation
 import dev.xdark.ijmcp.util.getContextText
 import dev.xdark.ijmcp.util.resolveFile
 import dev.xdark.ijmcp.util.resolveTargetElement
+import dev.xdark.ijmcp.util.searchReferences
 import kotlinx.coroutines.currentCoroutineContext
 
 class FindUsagesToolset : McpToolset {
@@ -63,41 +63,16 @@ class FindUsagesToolset : McpToolset {
 		val declarationLocation = readAction { formatLocation(project, targetElement) }
 		val resolvedName = readAction { (targetElement as? PsiNamedElement)?.name ?: targetElement.text }
 
-		val baseScope = when (scope) {
+		val searchScope = when (scope) {
 			"all" -> GlobalSearchScope.allScope(project)
 			else -> GlobalSearchScope.projectScope(project)
 		}
 
-		// For member searches via qualifiedClassName, narrow scope to files that reference
-		// the containing class first. This avoids resolving every text match of common
-		// method names (e.g. "getInstance") across all library files.
-		val searchScope = if (qualifiedClassName.isNotEmpty() && symbolName.isNotEmpty()) {
-			val containingClass = readAction {
-				val cls = JavaPsiFacade.getInstance(project)
-					.findClass(qualifiedClassName, GlobalSearchScope.allScope(project))
-					?: mcpFail("Class '$qualifiedClassName' not found")
-				(cls.navigationElement as? PsiClass) ?: cls
-			}
-			readAction {
-				val files = mutableSetOf<VirtualFile>()
-				ReferencesSearch.search(containingClass, baseScope).forEach(Processor { ref ->
-					ref.element.containingFile?.virtualFile?.let { files.add(it) }
-					true // collect all
-				})
-				if (files.isEmpty()) {
-					mcpFail("No references to class '$qualifiedClassName' found in the specified scope")
-				}
-				GlobalSearchScope.filesScope(project, files)
-			}
-		} else {
-			baseScope
-		}
-
 		data class UsageEntry(val location: String, val context: String)
 
-		val usages = readAction {
+		val usages = smartReadAction(project) {
 			val results = mutableListOf<UsageEntry>()
-			ReferencesSearch.search(targetElement, searchScope).forEach(Processor { ref ->
+			searchReferences(targetElement, searchScope).forEach(Processor { ref ->
 				val element = ref.element
 				val loc = formatLocation(project, element)
 				val context = getContextText(element)
@@ -138,7 +113,7 @@ class FindUsagesToolset : McpToolset {
 		symbolName: String,
 		memberIndex: Int,
 	): PsiElement {
-		return readAction {
+		return smartReadAction(project) {
 			val scope = GlobalSearchScope.allScope(project)
 			val compiledClass = JavaPsiFacade.getInstance(project).findClass(qualifiedClassName, scope)
 				?: mcpFail("Class '$qualifiedClassName' not found")

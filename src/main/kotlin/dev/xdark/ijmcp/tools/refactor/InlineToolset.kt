@@ -9,15 +9,16 @@ import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.application.readAction
+import com.intellij.openapi.application.smartReadAction
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.refactoring.inline.InlineMethodProcessor
 import dev.xdark.ijmcp.util.resolveFile
 import dev.xdark.ijmcp.util.resolveTargetElement
+import dev.xdark.ijmcp.util.searchReferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
@@ -55,8 +56,8 @@ class InlineToolset : McpToolset {
 		val name = readAction { method.name }
 
 		// Count call sites before inlining
-		val callSiteCount = readAction {
-			ReferencesSearch.search(method, GlobalSearchScope.projectScope(project))
+		val callSiteCount = smartReadAction(project) {
+			searchReferences(method, GlobalSearchScope.projectScope(project))
 				.findAll()
 				.size
 		}

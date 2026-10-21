@@ -8,6 +8,7 @@ import com.intellij.mcpserver.annotations.McpTool
 import com.intellij.mcpserver.mcpFail
 import com.intellij.mcpserver.project
 import com.intellij.openapi.application.readAction
+import com.intellij.openapi.application.smartReadAction
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.search.GlobalSearchScope
@@ -47,17 +48,17 @@ class ImplementationsToolset : McpToolset {
 
 		val targetElement = if (qualifiedClassName.isNotEmpty()) {
 			// Resolve by FQN — works for library/JDK classes
-			readAction {
+			smartReadAction(project) {
 				val searchScope = GlobalSearchScope.allScope(project)
 				JavaPsiFacade.getInstance(project).findClass(qualifiedClassName, searchScope)
 					?: mcpFail("Class '$qualifiedClassName' not found")
 			}
 		} else if (filePath.isEmpty() && symbolName.isNotEmpty()) {
 			// No file given — try to find by FQN or short name via JavaPsiFacade
-			readAction {
+			smartReadAction(project) {
 				val searchScope = GlobalSearchScope.allScope(project)
 				JavaPsiFacade.getInstance(project).findClass(symbolName, searchScope)
-			} ?: readAction {
+			} ?: smartReadAction(project) {
 				// Try short name lookup
 				val searchScope = GlobalSearchScope.projectScope(project)
 				val classes = JavaPsiFacade.getInstance(project)
@@ -87,7 +88,7 @@ class ImplementationsToolset : McpToolset {
 			else -> GlobalSearchScope.projectScope(project)
 		}
 
-		val definitions = readAction {
+		val definitions = smartReadAction(project) {
 			DefinitionsScopedSearch.search(targetElement, searchScope).findAll()
 		}
 

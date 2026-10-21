@@ -84,7 +84,13 @@ class GradleToolset : McpToolset, ConfigurableToolset {
 
 		val exitCodeDeferred = CompletableDeferred<Int>()
 		val outputBuilder = StringBuilder()
+		// Gradle often sends a line and its '\n' as separate chunks, so noise is filtered per complete line.
+		val pendingLine = StringBuilder()
 		val noisyRegex = compileNoisyRegex(mySettings.noisyPatterns)
+
+		fun appendUnlessNoisy(line: CharSequence) {
+			if (!isNoisyLine(line.toString(), noisyRegex)) outputBuilder.append(line)
+		}
 
 		withContext(Dispatchers.EDT) {
 			val runner = ProgramRunner.getRunner(executor.id, runnerAndConfigSettings.configuration)
@@ -105,9 +111,17 @@ class GradleToolset : McpToolset, ConfigurableToolset {
 					processHandler.addProcessListener(object : ProcessListener {
 						override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
 							if (outputType == ProcessOutputTypes.SYSTEM) return
-							val text = event.text
-							if (text.lines().all { isNoisyLine(it, noisyRegex) || it.isEmpty() }) return
-							outputBuilder.append(text)
+							synchronized(outputBuilder) {
+								pendingLine.append(event.text)
+								var start = 0
+								while (true) {
+									val end = pendingLine.indexOf("\n", start) + 1
+									if (end == 0) break
+									appendUnlessNoisy(pendingLine.subSequence(start, end))
+									start = end
+								}
+								pendingLine.delete(0, start)
+							}
 						}
 
 						override fun processTerminated(event: ProcessEvent) {
@@ -136,7 +150,11 @@ class GradleToolset : McpToolset, ConfigurableToolset {
 			}
 		}
 
-		val output = outputBuilder.toString()
+		val output = synchronized(outputBuilder) {
+			appendUnlessNoisy(pendingLine)
+			pendingLine.setLength(0)
+			outputBuilder.toString()
+		}
 		val success = exitCode == 0
 		return if (exitCode == null) {
 			"Gradle task timed out after ${timeout}ms.\n$output"
